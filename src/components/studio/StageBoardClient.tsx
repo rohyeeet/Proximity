@@ -41,11 +41,12 @@ function StageBoardInner() {
   const availableForms = forms.filter((form) => form.domainPackId === domainPackId && !stagedFormIds.has(form.id));
   const domainFlow = flows.find((flow) => flow.domainPackId === domainPackId);
 
-  function handleViewFlow() {
+  async function handleViewFlow() {
     if (domainFlow) {
       router.push(`/flows/${domainFlow.id}`);
     } else if (canEdit) {
-      router.push(`/flows/${createFlow(domainPackId)}`);
+      const id = await createFlow(domainPackId);
+      router.push(`/flows/${id}`);
     }
   }
 
@@ -86,8 +87,8 @@ function StageBoardInner() {
             canEdit={canEdit}
             onMove={(direction) => moveStage(stage.id, direction)}
             onChange={(patch) => updateStage(stage.id, (prev) => ({ ...prev, ...patch }))}
-            onNewForm={() => {
-              const id = createFormInStage(stage.id);
+            onNewForm={async () => {
+              const id = await createFormInStage(stage.id);
               router.push(`/forms/${id}`);
             }}
             onAddExisting={(formId) => addFormToStage(stage.id, formId)}

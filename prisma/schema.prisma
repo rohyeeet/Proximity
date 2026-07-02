@@ -1,0 +1,240 @@
+// Prisma schema for Proximity — mirrors the TS interfaces in src/types/*.ts field-for-field so the
+// API layer's response shapes don't have to change from what every Studio component already expects.
+//
+// JSONB is used deliberately (not a shortcut) for nested structures that are always read/written as
+// one unit and never queried field-by-field in SQL: form field definitions (with their validations/
+// visibility rules/lookup sources), flow node/edge graphs, and submission answer/evidence/version
+// records. Everything that's ever filtered, joined, or counted in SQL is a real column.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Domain configuration ----------
+
+model DomainPack {
+  id                        String   @id
+  slug                      String   @unique
+  name                      String
+  version                   String
+  status                    String // "draft" | "published" | "retired"
+  description               String
+  chainOfCustodyModes       String[] // ChainOfCustodyMode[]
+  defaultChainOfCustodyMode String?
+
+  organizations Organization[]
+  stages        Stage[]
+  formTemplates FormTemplate[]
+  flowTemplates FlowTemplate[]
+}
+
+model Organization {
+  id           String   @id
+  name         String
+  slug         String   @unique
+  domainPackId String
+  planTier     String // "starter" | "growth" | "enterprise"
+  status       String // "active" | "suspended" | "trial"
+  createdAt    DateTime
+
+  domainPack  DomainPack      @relation(fields: [domainPackId], references: [id])
+  roles       Role[]
+  memberships OrgMembership[]
+  connectors  Connector[]
+
+  @@index([domainPackId])
+}
+
+// ---------- Identity & access ----------
+
+model User {
+  id             String  @id
+  fullName       String
+  email          String  @unique
+  passwordHash   String
+  avatarInitials String
+  status         String // "active" | "invited" | "disabled"
+  // Platform tier is cross-org and intentionally NOT modeled as an OrgMembership (a platform
+  // admin isn't "a member" of any one org) — matches src/types/identity.ts's CurrentSession.isPlatformAdmin.
+  isPlatformAdmin Boolean @default(false)
+
+  memberships OrgMembership[]
+  submissions Submission[]    @relation("SubmittedBy")
+}
+
+model Role {
+  id             String  @id
+  organizationId String? // null for platform-tier roles (e.g. Super Admin)
+  name           String
+  tier           String // RoleTier
+  description    String
+  canView        String[]
+  canAct         String[]
+  cannot         String[]
+
+  organization Organization?   @relation(fields: [organizationId], references: [id])
+  memberships  OrgMembership[]
+
+  @@index([organizationId])
+}
+
+model OrgMembership {
+  id             String @id
+  organizationId String
+  userId         String
+  roleId         String
+  status         String // "active" | "invited" | "removed"
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+// ---------- Process model: Stage -> FormTemplate, and the Flow generated from both ----------
+
+model Stage {
+  id           String  @id
+  domainPackId String
+  name         String
+  description  String?
+  sortOrder    Int
+
+  // Flat id lists, matching src/types/stages.ts exactly — resolved against Connector/FormTemplate
+  // in application code (the same pattern StageBoardClient.tsx already uses), not enforced as SQL
+  // foreign keys. A Stage owns this membership list; FormTemplate does not carry a back-reference,
+  // mirroring the one-directional TS model instead of inventing a second source of truth.
+  connectorIds    String[]
+  formTemplateIds String[]
+
+  domainPack DomainPack @relation(fields: [domainPackId], references: [id])
+
+  @@index([domainPackId])
+}
+
+model FormTemplate {
+  id          String @id
+  domainPackId String
+  code        String
+  name        String
+  description String
+  category    String
+
+  domainPack  DomainPack            @relation(fields: [domainPackId], references: [id])
+  versions    FormTemplateVersion[]
+  submissions Submission[]
+
+  @@unique([domainPackId, code])
+  @@index([domainPackId])
+}
+
+model FormTemplateVersion {
+  id             String   @id @default(cuid())
+  formTemplateId String
+  versionNo      Int
+  publishedAt    DateTime
+  fields         Json // FormFieldDefinition[] — validations, visibility rules, lookup sources, link filters, all nested
+
+  formTemplate FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([formTemplateId, versionNo])
+}
+
+model FlowTemplate {
+  id           String @id
+  domainPackId String
+  code         String
+  name         String
+  status       String // "draft" | "published"
+  versionNo    Int
+  triggerLabel String
+  nodes        Json // FlowNodeDefinition[] (sourceStageId tags backbone nodes owned by the sync engine)
+  edges        Json // FlowEdgeDefinition[] (auto tags edges owned by the sync engine)
+
+  domainPack DomainPack @relation(fields: [domainPackId], references: [id])
+
+  @@unique([domainPackId, code])
+  @@index([domainPackId])
+}
+
+// ---------- Records ----------
+
+model Submission {
+  id                    String   @id
+  displayId             String
+  formTemplateId        String
+  formTemplateVersionNo Int
+  flowNodeLabel         String
+  reviewStatus          String
+  syncStatus            String
+  submittedByUserId     String
+  currentVersionNo      Int
+  updatedAt             DateTime
+  answers               Json // SubmissionAnswer[]
+  evidence              Json // EvidenceFile[]
+  versions              Json // SubmissionVersionRecord[]
+  reviewActions         Json // ReviewActionRecord[]
+  linkedSubmissionIds   String[]
+  smartCheckSummary     String
+
+  formTemplate FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  submittedBy  User         @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
+
+  @@index([formTemplateId])
+  @@index([submittedByUserId])
+  @@index([reviewStatus])
+}
+
+// ---------- Connectors & devices ----------
+
+model Connector {
+  id             String  @id
+  organizationId String
+  name           String
+  connectorType  String
+  protocol       String?
+  status         String
+  endpoint       String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  devices      Device[]
+
+  @@index([organizationId])
+}
+
+model Device {
+  id             String  @id
+  connectorId    String
+  name           String
+  externalRef    String
+  calibration    Json? // DeviceCalibration
+  coveragePct    Int
+  lastGapMinutes Int?
+  tags           Json // TelemetryTag[]
+
+  connector Connector         @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  telemetry TelemetryStream[]
+
+  @@index([connectorId])
+}
+
+model TelemetryStream {
+  id            String  @id @default(cuid())
+  deviceId      String
+  parameterCode String
+  unit          String
+  latestValue   Float
+  thresholdHigh Float?
+  points        Json // TelemetryPoint[]
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, parameterCode])
+}

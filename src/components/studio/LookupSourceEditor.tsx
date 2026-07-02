@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Tabs } from "@/components/ui/Tabs";
 import { SearchPicker } from "@/components/ui/SearchPicker";
 import { EntityPicker } from "./EntityPicker";
@@ -8,7 +9,6 @@ import { LinkFilterEditor } from "./LinkFilterEditor";
 import { InfoHint } from "./knowledge/InfoHint";
 import { useSession } from "@/lib/session";
 import { useStudio } from "@/lib/studio";
-import { getConnectorsByOrganization, getDevicesByConnector } from "@/data";
 import type { Device, LookupSource, LookupSourceKind, TelemetryTag } from "@/types";
 
 const kindOptions: { value: LookupSourceKind; label: string }[] = [
@@ -29,7 +29,21 @@ export function LookupSourceEditor({
   const { session } = useSession();
   const { getForm } = useStudio();
   const kind: LookupSourceKind = lookupSource?.kind ?? "internal_form";
-  const orgDevices = getConnectorsByOrganization(session.organization.id).flatMap((connector) => getDevicesByConnector(connector.id));
+
+  const [orgDevices, setOrgDevices] = useState<Device[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/organizations/${session.organization.id}/devices`)
+      .then((res) => res.json())
+      .then((data: Device[]) => {
+        if (!cancelled) setOrgDevices(data);
+      })
+      .catch((error) => console.error("Failed to load devices", error));
+    return () => {
+      cancelled = true;
+    };
+  }, [session.organization.id]);
+
   const selectedDevice = orgDevices.find((device) => device.id === lookupSource?.deviceId);
   const sourceForm = lookupSource?.sourceFormTemplateId ? getForm(lookupSource.sourceFormTemplateId) : undefined;
 

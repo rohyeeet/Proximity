@@ -7,12 +7,19 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { ReviewStatusChip, SyncStatusChip } from "@/components/ui/StatusChip";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
-import { getUser } from "@/data";
 import type { FormTemplate, ReviewActionRecord, Submission } from "@/types";
 
 const evidenceIcon = { photo: FileImage, document_scan: ScanLine, gps_log: MapPin, signature: PenTool };
 
-export function RecordDetailClient({ form, submission }: { form: FormTemplate; submission: Submission }) {
+export function RecordDetailClient({
+  form,
+  submission,
+  submitterName,
+}: {
+  form: FormTemplate;
+  submission: Submission;
+  submitterName: string;
+}) {
   const [reviewStatus, setReviewStatus] = useState(submission.reviewStatus);
   const [reviewActions, setReviewActions] = useState<ReviewActionRecord[]>(submission.reviewActions);
   const [isReturning, setIsReturning] = useState(false);
@@ -60,7 +67,7 @@ export function RecordDetailClient({ form, submission }: { form: FormTemplate; s
             <SyncStatusChip status={submission.syncStatus} />
           </div>
           <p className="mt-1 text-[13px] text-ink-soft">
-            {form.name} · v{submission.formTemplateVersionNo} · submitted by {getUser(submission.submittedByUserId)?.fullName ?? "Unknown"}
+            {form.name} · v{submission.formTemplateVersionNo} · submitted by {submitterName}
           </p>
         </div>
       </div>

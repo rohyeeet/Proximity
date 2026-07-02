@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   LayoutGrid,
   FileText,
@@ -14,6 +15,7 @@ import {
   ShieldCheck,
   ChevronsLeft,
   ChevronsRight,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/session";
@@ -136,11 +138,19 @@ export function Sidebar() {
             {session.user.avatarInitials}
           </div>
           {!collapsed && (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium text-ink">{session.user.fullName}</p>
               <p className="truncate text-[11px] text-ink-soft">{session.role.name}</p>
             </div>
           )}
+          <button
+            aria-label="Sign out"
+            title="Sign out"
+            onClick={() => signOut({ redirectTo: "/login" })}
+            className="flex size-7 shrink-0 items-center justify-center rounded text-ink-soft hover:bg-sunken hover:text-critical-text"
+          >
+            <LogOut className="size-4" />
+          </button>
         </div>
       </div>
     </aside>

@@ -1,11 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { formTemplates, flowTemplates, stages as stageTemplates } from "@/data";
-import { genId } from "@/lib/utils";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 import type { FormTemplate, FlowTemplate, Stage } from "@/types";
-
-const STORAGE_KEY = "proximity-studio-v1";
 
 interface FormEntry {
   data: FormTemplate;
@@ -22,31 +18,20 @@ interface StageEntry {
   dirty: boolean;
 }
 
-interface PersistedShape {
-  forms: Record<string, FormEntry>;
-  flows: Record<string, FlowEntry>;
-  stages: Record<string, StageEntry>;
-  formOrder: string[];
-  flowOrder: string[];
-  stageOrder: string[];
+function keyBy<T extends { id: string }>(items: T[]): Record<string, { data: T; dirty: boolean }> {
+  return Object.fromEntries(items.map((item) => [item.id, { data: item, dirty: false }]));
 }
 
-function cloneForms(): Record<string, FormEntry> {
-  return Object.fromEntries(
-    formTemplates.map((form) => [form.id, { data: structuredClone(form), dirty: false }])
-  );
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${url} failed: ${await res.text()}`);
+  return res.json() as Promise<T>;
 }
 
-function cloneFlows(): Record<string, FlowEntry> {
-  return Object.fromEntries(
-    flowTemplates.map((flow) => [flow.id, { data: structuredClone(flow), dirty: false }])
-  );
-}
-
-function cloneStages(): Record<string, StageEntry> {
-  return Object.fromEntries(
-    stageTemplates.map((stage) => [stage.id, { data: structuredClone(stage), dirty: false }])
-  );
+async function patchJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${url} failed: ${await res.text()}`);
+  return res.json() as Promise<T>;
 }
 
 interface StudioContextValue {
@@ -62,13 +47,13 @@ interface StudioContextValue {
   updateForm: (id: string, updater: (prev: FormTemplate) => FormTemplate) => void;
   updateFlow: (id: string, updater: (prev: FlowTemplate) => FlowTemplate) => void;
   updateStage: (id: string, updater: (prev: Stage) => Stage) => void;
-  publishForm: (id: string) => void;
-  publishFlow: (id: string) => void;
-  createForm: (domainPackId: string) => string;
-  createFlow: (domainPackId: string) => string;
-  createStage: (domainPackId: string) => string;
-  createFormInStage: (stageId: string) => string;
-  moveStage: (id: string, direction: -1 | 1) => void;
+  publishForm: (id: string) => Promise<void>;
+  publishFlow: (id: string) => Promise<void>;
+  createForm: (domainPackId: string) => Promise<string>;
+  createFlow: (domainPackId: string) => Promise<string>;
+  createStage: (domainPackId: string) => Promise<string>;
+  createFormInStage: (stageId: string) => Promise<string>;
+  moveStage: (id: string, direction: -1 | 1) => Promise<void>;
   addFormToStage: (stageId: string, formId: string) => void;
   removeFormFromStage: (stageId: string, formId: string) => void;
   moveFormInStage: (stageId: string, formId: string, direction: -1 | 1) => void;
@@ -76,55 +61,48 @@ interface StudioContextValue {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
-export function StudioProvider({ children }: { children: React.ReactNode }) {
-  const [forms, setForms] = useState<Record<string, FormEntry>>(cloneForms);
-  const [flows, setFlows] = useState<Record<string, FlowEntry>>(cloneFlows);
-  const [stages, setStages] = useState<Record<string, StageEntry>>(cloneStages);
-  const [formOrder, setFormOrder] = useState<string[]>(() => formTemplates.map((f) => f.id));
-  const [flowOrder, setFlowOrder] = useState<string[]>(() => flowTemplates.map((f) => f.id));
-  const [stageOrder, setStageOrder] = useState<string[]>(() => stageTemplates.map((s) => s.id));
-  const hydrated = useRef(false);
+const PATCH_DEBOUNCE_MS = 600;
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const stored = JSON.parse(raw) as PersistedShape;
-        setForms((prev) => ({ ...prev, ...stored.forms }));
-        setFlows((prev) => ({ ...prev, ...stored.flows }));
-        setStages((prev) => ({ ...prev, ...stored.stages }));
-        setFormOrder((prev) => {
-          const merged = [...prev];
-          for (const id of stored.formOrder ?? []) if (!merged.includes(id)) merged.push(id);
-          return merged;
-        });
-        setFlowOrder((prev) => {
-          const merged = [...prev];
-          for (const id of stored.flowOrder ?? []) if (!merged.includes(id)) merged.push(id);
-          return merged;
-        });
-        setStageOrder((prev) => {
-          const merged = [...prev];
-          for (const id of stored.stageOrder ?? []) if (!merged.includes(id)) merged.push(id);
-          return merged;
-        });
-      }
-    } catch {
-      // corrupt or unavailable storage — fall back to static defaults
-    } finally {
-      hydrated.current = true;
-    }
-  }, []);
+export function StudioProvider({
+  initialForms,
+  initialFlows,
+  initialStages,
+  children,
+}: {
+  initialForms: FormTemplate[];
+  initialFlows: FlowTemplate[];
+  initialStages: Stage[];
+  children: React.ReactNode;
+}) {
+  const [forms, setForms] = useState<Record<string, FormEntry>>(() => keyBy(initialForms));
+  const [flows, setFlows] = useState<Record<string, FlowEntry>>(() => keyBy(initialFlows));
+  const [stages, setStages] = useState<Record<string, StageEntry>>(() => keyBy(initialStages));
+  const [formOrder, setFormOrder] = useState<string[]>(() => initialForms.map((f) => f.id));
+  const [flowOrder, setFlowOrder] = useState<string[]>(() => initialFlows.map((f) => f.id));
+  const [stageOrder, setStageOrder] = useState<string[]>(() => initialStages.map((s) => s.id));
 
-  useEffect(() => {
-    if (!hydrated.current) return;
-    try {
-      const payload: PersistedShape = { forms, flows, stages, formOrder, flowOrder, stageOrder };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // storage full/unavailable — edits stay in-memory for this session
-    }
-  }, [forms, flows, stages, formOrder, flowOrder, stageOrder]);
+  // Local edits apply to state immediately; the network write to the database is debounced per
+  // entity so fast typing doesn't fire a request per keystroke. Publishing flushes any pending
+  // write first, so a publish never races an unsaved edit.
+  const pendingSaves = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; run: () => void }>>(new Map());
+
+  function scheduleSave(key: string, run: () => void) {
+    const existing = pendingSaves.current.get(key);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      pendingSaves.current.delete(key);
+      run();
+    }, PATCH_DEBOUNCE_MS);
+    pendingSaves.current.set(key, { timer, run });
+  }
+
+  function flushSave(key: string) {
+    const pending = pendingSaves.current.get(key);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingSaves.current.delete(key);
+    pending.run();
+  }
 
   const value = useMemo<StudioContextValue>(() => {
     function getForm(id: string) {
@@ -136,125 +114,135 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     function getStage(id: string) {
       return stages[id]?.data;
     }
+
+    function saveForm(id: string, data: FormTemplate) {
+      patchJson<FormTemplate>(`/api/forms/${id}`, {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        fields: data.currentVersion.fields,
+      })
+        .then((saved) => setForms((prev) => (prev[id] ? { ...prev, [id]: { data: saved, dirty: prev[id]!.dirty } } : prev)))
+        .catch((error) => console.error("Failed to save form", id, error));
+    }
+
+    function saveFlow(id: string, data: FlowTemplate) {
+      patchJson<FlowTemplate>(`/api/flows/${id}`, {
+        name: data.name,
+        triggerLabel: data.triggerLabel,
+        nodes: data.nodes,
+        edges: data.edges,
+      })
+        .then((saved) => setFlows((prev) => (prev[id] ? { ...prev, [id]: { data: saved, dirty: prev[id]!.dirty } } : prev)))
+        .catch((error) => console.error("Failed to save flow", id, error));
+    }
+
+    function saveStage(id: string, data: Stage) {
+      patchJson<Stage>(`/api/stages/${id}`, {
+        name: data.name,
+        description: data.description,
+        connectorIds: data.connectorIds,
+        formTemplateIds: data.formTemplateIds,
+      })
+        .then((saved) => setStages((prev) => (prev[id] ? { ...prev, [id]: { data: saved, dirty: prev[id]!.dirty } } : prev)))
+        .catch((error) => console.error("Failed to save stage", id, error));
+    }
+
     function updateForm(id: string, updater: (prev: FormTemplate) => FormTemplate) {
       setForms((prev) => {
         const entry = prev[id];
         if (!entry) return prev;
-        return { ...prev, [id]: { data: updater(entry.data), dirty: true } };
+        const next = updater(entry.data);
+        scheduleSave(`form:${id}`, () => saveForm(id, next));
+        return { ...prev, [id]: { data: next, dirty: true } };
       });
     }
     function updateFlow(id: string, updater: (prev: FlowTemplate) => FlowTemplate) {
       setFlows((prev) => {
         const entry = prev[id];
         if (!entry) return prev;
-        return { ...prev, [id]: { data: updater(entry.data), dirty: true } };
+        const next = updater(entry.data);
+        scheduleSave(`flow:${id}`, () => saveFlow(id, next));
+        return { ...prev, [id]: { data: next, dirty: true } };
       });
     }
     function updateStage(id: string, updater: (prev: Stage) => Stage) {
       setStages((prev) => {
         const entry = prev[id];
         if (!entry) return prev;
-        return { ...prev, [id]: { data: updater(entry.data), dirty: true } };
+        const next = updater(entry.data);
+        scheduleSave(`stage:${id}`, () => saveStage(id, next));
+        return { ...prev, [id]: { data: next, dirty: true } };
       });
     }
-    function publishForm(id: string) {
-      setForms((prev) => {
-        const entry = prev[id];
-        if (!entry) return prev;
-        const nextVersion = entry.data.currentVersion.versionNo + 1;
-        return {
-          ...prev,
-          [id]: {
-            dirty: false,
-            data: {
-              ...entry.data,
-              currentVersion: { ...entry.data.currentVersion, versionNo: nextVersion, publishedAt: new Date().toISOString() },
-            },
-          },
-        };
-      });
+
+    async function publishForm(id: string) {
+      flushSave(`form:${id}`);
+      const entry = forms[id];
+      if (entry) await patchJson<FormTemplate>(`/api/forms/${id}`, {
+        name: entry.data.name,
+        description: entry.data.description,
+        category: entry.data.category,
+        fields: entry.data.currentVersion.fields,
+      }).catch(() => undefined);
+      const published = await postJson<FormTemplate>(`/api/forms/${id}/publish`, {});
+      setForms((prev) => ({ ...prev, [id]: { data: published, dirty: false } }));
     }
-    function publishFlow(id: string) {
-      setFlows((prev) => {
-        const entry = prev[id];
-        if (!entry) return prev;
-        return {
-          ...prev,
-          [id]: {
-            dirty: false,
-            data: { ...entry.data, versionNo: entry.data.versionNo + 1, status: "published" },
-          },
-        };
-      });
+    async function publishFlow(id: string) {
+      flushSave(`flow:${id}`);
+      const entry = flows[id];
+      if (entry) await patchJson<FlowTemplate>(`/api/flows/${id}`, {
+        name: entry.data.name,
+        triggerLabel: entry.data.triggerLabel,
+        nodes: entry.data.nodes,
+        edges: entry.data.edges,
+      }).catch(() => undefined);
+      const published = await postJson<FlowTemplate>(`/api/flows/${id}/publish`, {});
+      setFlows((prev) => ({ ...prev, [id]: { data: published, dirty: false } }));
     }
-    function createForm(domainPackId: string): string {
-      const id = genId("form-custom");
-      const form: FormTemplate = {
-        id,
-        domainPackId,
-        code: id.replace(/-/g, "_"),
-        name: "Untitled form",
-        description: "",
-        category: "Custom",
-        submissionCount: 0,
-        needsCheckCount: 0,
-        needsFixCount: 0,
-        currentVersion: { versionNo: 0, publishedAt: new Date().toISOString(), fields: [] },
-      };
-      setForms((prev) => ({ ...prev, [id]: { data: form, dirty: true } }));
-      setFormOrder((prev) => [...prev, id]);
-      return id;
+
+    async function createForm(domainPackId: string): Promise<string> {
+      const { form } = await postJson<{ form: FormTemplate }>(`/api/forms`, { domainPackId });
+      setForms((prev) => ({ ...prev, [form.id]: { data: form, dirty: false } }));
+      setFormOrder((prev) => [...prev, form.id]);
+      return form.id;
     }
-    function createFlow(domainPackId: string): string {
-      const id = genId("flow-custom");
-      const flow: FlowTemplate = {
-        id,
-        domainPackId,
-        code: id.replace(/-/g, "_"),
-        name: "Untitled flow",
-        status: "draft",
-        versionNo: 0,
-        triggerLabel: "Manually triggered",
-        nodes: [],
-        edges: [],
-      };
-      setFlows((prev) => ({ ...prev, [id]: { data: flow, dirty: true } }));
-      setFlowOrder((prev) => [...prev, id]);
-      return id;
+    async function createFlow(domainPackId: string): Promise<string> {
+      const flow = await postJson<FlowTemplate>(`/api/flows`, { domainPackId });
+      setFlows((prev) => ({ ...prev, [flow.id]: { data: flow, dirty: false } }));
+      setFlowOrder((prev) => [...prev, flow.id]);
+      return flow.id;
     }
-    function createStage(domainPackId: string): string {
-      const id = genId("stage-custom");
-      const stage: Stage = { id, domainPackId, name: "Untitled stage", sortOrder: 0, connectorIds: [], formTemplateIds: [] };
-      setStages((prev) => ({ ...prev, [id]: { data: stage, dirty: true } }));
-      setStageOrder((prev) => [...prev, id]);
-      return id;
+    async function createStage(domainPackId: string): Promise<string> {
+      const stage = await postJson<Stage>(`/api/stages`, { domainPackId });
+      setStages((prev) => ({ ...prev, [stage.id]: { data: stage, dirty: false } }));
+      setStageOrder((prev) => [...prev, stage.id]);
+      return stage.id;
     }
-    function createFormInStage(stageId: string): string {
+    async function createFormInStage(stageId: string): Promise<string> {
       const stage = stages[stageId]?.data;
       if (!stage) throw new Error(`Unknown stage: ${stageId}`);
-      const id = createForm(stage.domainPackId);
-      setForms((prev) => {
-        const entry = prev[id];
-        if (!entry) return prev;
-        return { ...prev, [id]: { data: { ...entry.data, category: stage.name }, dirty: true } };
+      const { form, stage: updatedStage } = await postJson<{ form: FormTemplate; stage?: Stage }>(`/api/forms`, {
+        domainPackId: stage.domainPackId,
+        stageId,
       });
-      setStages((prev) => {
-        const entry = prev[stageId];
-        if (!entry) return prev;
-        return { ...prev, [stageId]: { data: { ...entry.data, formTemplateIds: [...entry.data.formTemplateIds, id] }, dirty: true } };
-      });
-      return id;
+      setForms((prev) => ({ ...prev, [form.id]: { data: form, dirty: false } }));
+      setFormOrder((prev) => [...prev, form.id]);
+      if (updatedStage) setStages((prev) => ({ ...prev, [stageId]: { data: updatedStage, dirty: false } }));
+      return form.id;
     }
-    function moveStage(id: string, direction: -1 | 1) {
-      setStageOrder((prev) => {
-        const index = prev.indexOf(id);
-        const targetIndex = index + direction;
-        if (index === -1 || targetIndex < 0 || targetIndex >= prev.length) return prev;
-        const next = [...prev];
-        const tmp = next[index]!;
-        next[index] = next[targetIndex]!;
-        next[targetIndex] = tmp;
+
+    async function moveStage(id: string, direction: -1 | 1) {
+      const updated = await postJson<Stage[]>(`/api/stages/${id}/move`, { direction });
+      setStages((prev) => {
+        const next = { ...prev };
+        for (const stage of updated) next[stage.id] = { data: stage, dirty: false };
         return next;
+      });
+      setStageOrder((prev) => {
+        const updatedIds = new Set(updated.map((stage) => stage.id));
+        const otherIds = prev.filter((sid) => !updatedIds.has(sid));
+        return [...otherIds, ...updated.map((stage) => stage.id)];
       });
     }
     function addFormToStage(stageId: string, formId: string) {

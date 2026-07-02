@@ -19,6 +19,8 @@ export interface User {
   email: string;
   avatarInitials: string;
   status: "active" | "invited" | "disabled";
+  /** Platform tier is cross-org and intentionally not modeled as an OrgMembership. */
+  isPlatformAdmin?: boolean;
 }
 
 export interface Role {

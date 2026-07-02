@@ -1,13 +1,10 @@
 import { AlertCircle } from "lucide-react";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { formatDate } from "@/lib/utils";
-import { telemetryStreams } from "@/data";
 import { TelemetrySparkline } from "./TelemetrySparkline";
-import type { Device } from "@/types";
+import type { Device, TelemetryStream } from "@/types";
 
-export function DeviceCard({ device }: { device: Device }) {
-  const streams = telemetryStreams.filter((stream) => stream.deviceId === device.id);
-
+export function DeviceCard({ device, streams }: { device: Device; streams: TelemetryStream[] }) {
   return (
     <div className="rounded-lg border border-border bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">

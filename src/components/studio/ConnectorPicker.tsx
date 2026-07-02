@@ -1,7 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { MultiSearchPicker } from "@/components/ui/SearchPicker";
-import { getConnectorsByOrganization } from "@/data";
 import { cn } from "@/lib/utils";
 import type { Connector } from "@/types";
 
@@ -21,7 +21,20 @@ export function ConnectorPicker({
   values: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const candidates = getConnectorsByOrganization(organizationId);
+  const [candidates, setCandidates] = useState<Connector[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/organizations/${organizationId}/connectors`)
+      .then((res) => res.json())
+      .then((data: Connector[]) => {
+        if (!cancelled) setCandidates(data);
+      })
+      .catch((error) => console.error("Failed to load connectors", error));
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
 
   return (
     <MultiSearchPicker<Connector>
