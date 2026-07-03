@@ -116,6 +116,13 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
     window.setTimeout(() => reactFlow.fitView({ padding: 0.15, duration: 300 }), 50);
   }
 
+  /** Pans to a point without changing the current zoom — keeps the canvas scale stable instead of
+   * re-fitting (and therefore shrinking) the whole graph every time a single node is added. */
+  function panTo(position: { x: number; y: number }) {
+    const zoom = reactFlow.getZoom();
+    window.setTimeout(() => reactFlow.setCenter(position.x + 130, position.y + 45, { zoom, duration: 300 }), 50);
+  }
+
   useEffect(() => {
     if (!flow) return;
     setNodes(toRfNodes(flow, selection));
@@ -196,21 +203,26 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
   function handleAddNode(nodeType: FlowNodeType) {
     const id = genId("node");
     const selectedNode = selection?.type === "node" ? flow!.nodes.find((n) => n.id === selection.id) : undefined;
-    const newNode: FlowNodeDefinition = {
-      id,
-      nodeType,
-      label: flowNodeCatalog.find((m) => m.type === nodeType)!.label,
-      position: selectedNode ? { x: selectedNode.position.x + 300, y: selectedNode.position.y } : { x: 0, y: flow!.nodes.length * 40 },
-    };
-    updateFlow(flow!.id, (prev) => {
-      const nextNodes = [...prev.nodes, newNode];
-      const nextEdges = selectedNode ? [...prev.edges, { id: genId("edge"), fromNodeId: selectedNode.id, toNodeId: id, kind: "sequential" as const }] : prev.edges;
-      const arranged = autoArrangeFlow(nextNodes, nextEdges);
-      const arrangedNodes = nextNodes.map((n) => ({ ...n, position: arranged.find((a) => a.id === n.id)?.position ?? n.position }));
-      return { ...prev, nodes: arrangedNodes, edges: nextEdges };
-    });
+
+    // Slot the new node in without touching any existing node's position — re-running
+    // auto-arrange on the whole graph for a single addition was what made the canvas feel like
+    // it was constantly reshuffling and zooming out. If the selected node already has children,
+    // stack the new one below them instead of overlapping.
+    const position = selectedNode
+      ? {
+          x: selectedNode.position.x + 320,
+          y: selectedNode.position.y + flow!.edges.filter((e) => e.fromNodeId === selectedNode.id).length * 130,
+        }
+      : { x: 0, y: flow!.nodes.reduce((max, n) => Math.max(max, n.position.y), -130) + 130 };
+
+    const newNode: FlowNodeDefinition = { id, nodeType, label: flowNodeCatalog.find((m) => m.type === nodeType)!.label, position };
+    const nextEdges = selectedNode
+      ? [...flow!.edges, { id: genId("edge"), fromNodeId: selectedNode.id, toNodeId: id, kind: "sequential" as const }]
+      : flow!.edges;
+
+    updateFlow(flow!.id, (prev) => ({ ...prev, nodes: [...prev.nodes, newNode], edges: nextEdges }));
     setSelection({ type: "node", id });
-    refitView();
+    panTo(position);
   }
 
   function handleAutoArrange() {
