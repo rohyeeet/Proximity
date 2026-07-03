@@ -34,6 +34,11 @@ async function patchJson<T>(url: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function deleteRequest(url: string): Promise<void> {
+  const res = await fetch(url, { method: "DELETE" });
+  if (!res.ok) throw new Error(`${url} failed: ${await res.text()}`);
+}
+
 interface StudioContextValue {
   forms: FormTemplate[];
   flows: FlowTemplate[];
@@ -52,6 +57,7 @@ interface StudioContextValue {
   createForm: (domainPackId: string) => Promise<string>;
   createFlow: (domainPackId: string) => Promise<string>;
   createStage: (domainPackId: string) => Promise<string>;
+  deleteStage: (id: string) => Promise<void>;
   createFormInStage: (stageId: string) => Promise<string>;
   moveStage: (id: string, direction: -1 | 1) => Promise<void>;
   addFormToStage: (stageId: string, formId: string) => void;
@@ -219,6 +225,15 @@ export function StudioProvider({
       setStageOrder((prev) => [...prev, stage.id]);
       return stage.id;
     }
+    async function deleteStage(id: string): Promise<void> {
+      await deleteRequest(`/api/stages/${id}`);
+      setStages((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setStageOrder((prev) => prev.filter((sid) => sid !== id));
+    }
     async function createFormInStage(stageId: string): Promise<string> {
       const stage = stages[stageId]?.data;
       if (!stage) throw new Error(`Unknown stage: ${stageId}`);
@@ -282,6 +297,7 @@ export function StudioProvider({
       createForm,
       createFlow,
       createStage,
+      deleteStage,
       createFormInStage,
       moveStage,
       addFormToStage,

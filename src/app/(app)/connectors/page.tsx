@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Cable } from "lucide-react";
 import { useSession } from "@/lib/session";
+import { canEditStudio } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { ConnectorStatusChip } from "@/components/ui/StatusChip";
+import { CreateConnectorModal } from "@/components/connectors/CreateConnectorModal";
 import type { Connector } from "@/types";
 
 const protocolLabel: Record<string, string> = {
@@ -24,6 +26,8 @@ const connectorTypeLabel: Record<string, string> = {
 export default function ConnectorsPage() {
   const { session } = useSession();
   const [orgConnectors, setOrgConnectors] = useState<(Connector & { deviceCount: number })[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const canEdit = canEditStudio(session.role.tier);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,7 +48,20 @@ export default function ConnectorsPage() {
         eyebrow={session.organization.name}
         title="Connectors"
         description="Database lookups, REST sources, and SCADA/PLC devices — the same abstraction feeds dropdowns, forms, and workflow triggers."
-        actions={<Button variant="primary">Add connector</Button>}
+        actions={
+          canEdit ? (
+            <Button variant="primary" onClick={() => setShowCreate(true)}>
+              Add connector
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <CreateConnectorModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        organizationId={session.organization.id}
+        onCreated={(connector) => setOrgConnectors((prev) => [connector, ...prev])}
       />
 
       <div className="flex flex-col gap-3">

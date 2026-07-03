@@ -33,7 +33,7 @@ export function AppShell({
       initialActiveOrganizationId={initialActiveOrganizationId}
     >
       <StudioProvider initialForms={initialForms} initialFlows={initialFlows} initialStages={initialStages}>
-        <div className="flex min-h-screen bg-paper">
+        <div className="flex h-screen overflow-hidden bg-paper">
           <Sidebar />
           <div className="flex flex-1 flex-col">
             <Topbar />

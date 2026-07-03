@@ -1,4 +1,5 @@
 export type FlowNodeType =
+  | "start"
   | "form_step"
   | "branch"
   | "review_gate"

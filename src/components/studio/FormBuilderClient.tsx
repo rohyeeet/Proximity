@@ -106,6 +106,10 @@ function FormBuilderInner({ formId }: { formId: string }) {
               wrapperClassName="flex min-w-0 flex-1 items-center gap-1.5"
               textClassName="text-xl font-semibold text-ink"
             />
+            <StatusChip
+              label={form.currentVersion.status === "published" ? "Live" : "Draft"}
+              tone={form.currentVersion.status === "published" ? "good" : "hold"}
+            />
             {!canEdit && <StatusChip label="View only" tone="hold" />}
           </div>
           <EditableText
@@ -125,8 +129,8 @@ function FormBuilderInner({ formId }: { formId: string }) {
             {previewOpen ? "Back to editor" : "Preview"}
           </Button>
           {canEdit && (
-            <Button variant="primary" onClick={() => publishForm(form.id)}>
-              {dirty ? `Publish v${form.currentVersion.versionNo + 1}` : `v${form.currentVersion.versionNo} published`}
+            <Button variant="primary" onClick={() => publishForm(form.id)} disabled={form.currentVersion.status === "published" && !dirty}>
+              {form.currentVersion.status === "published" && !dirty ? `v${form.currentVersion.versionNo} published` : `Publish v${form.currentVersion.versionNo}`}
             </Button>
           )}
         </div>

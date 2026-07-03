@@ -31,7 +31,7 @@ export const organizations: Organization[] = [
 ];
 
 export const users: User[] = [
-  { id: "user-rohit", fullName: "Rohit Singh", email: "rohit.singh@varaha.com", avatarInitials: "RS", status: "active", isPlatformAdmin: true },
+  { id: "user-rohit", fullName: "Rohit Singh", email: "rohit142001singh@gmail.com", avatarInitials: "RS", status: "active", isPlatformAdmin: true },
   { id: "user-arun", fullName: "Arun Kumar", email: "arun.kumar@varaha.com", avatarInitials: "AK", status: "active" },
   { id: "user-kavya", fullName: "Kavya Patil", email: "kavya.patil@varaha.com", avatarInitials: "KP", status: "active" },
   { id: "user-sara", fullName: "Sara Rao", email: "sara.rao@varaha.com", avatarInitials: "SR", status: "active" },

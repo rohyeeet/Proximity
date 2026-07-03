@@ -18,7 +18,20 @@ import {
   toUser,
   type FormCounts,
 } from "@/lib/mappers";
-import type { Connector, DomainPack, Device, FlowTemplate, FormTemplate, Organization, Role, Stage, Submission, TelemetryStream, User } from "@/types";
+import type {
+  Connector,
+  DomainPack,
+  Device,
+  FlowTemplate,
+  FormFieldDefinition,
+  FormTemplate,
+  Organization,
+  Role,
+  Stage,
+  Submission,
+  TelemetryStream,
+  User,
+} from "@/types";
 
 export async function getRole(id: string): Promise<Role | undefined> {
   const row = await prisma.role.findUnique({ where: { id } });
@@ -58,15 +71,23 @@ export async function getAllStages(): Promise<Stage[]> {
 
 export async function getFormCounts(formTemplateId: string): Promise<FormCounts> {
   const [submissionCount, needsCheckCount, needsFixCount] = await Promise.all([
-    prisma.submission.count({ where: { formTemplateId } }),
-    prisma.submission.count({ where: { formTemplateId, reviewStatus: "needs_check" } }),
-    prisma.submission.count({ where: { formTemplateId, reviewStatus: "needs_fix" } }),
+    prisma.submission.count({ where: { formTemplateId, isTest: false } }),
+    prisma.submission.count({ where: { formTemplateId, reviewStatus: "needs_check", isTest: false } }),
+    prisma.submission.count({ where: { formTemplateId, reviewStatus: "needs_fix", isTest: false } }),
   ]);
   return { submissionCount, needsCheckCount, needsFixCount };
 }
 
 async function latestVersion(formTemplateId: string) {
   return prisma.formTemplateVersion.findFirst({ where: { formTemplateId }, orderBy: { versionNo: "desc" } });
+}
+
+/** Version-pinned lookup — used to render a submission's answers against the exact field set it was submitted under. */
+export async function getFormTemplateVersionFields(formTemplateId: string, versionNo: number) {
+  const version = await prisma.formTemplateVersion.findUnique({
+    where: { formTemplateId_versionNo: { formTemplateId, versionNo } },
+  });
+  return version ? (version.fields as unknown as FormFieldDefinition[]) : undefined;
 }
 
 export async function getFormTemplatesByDomainPack(domainPackId: string): Promise<FormTemplate[]> {
@@ -120,7 +141,12 @@ export async function getAllFlowTemplates(): Promise<FlowTemplate[]> {
 }
 
 export async function getSubmissionsByForm(formTemplateId: string): Promise<Submission[]> {
-  const rows = await prisma.submission.findMany({ where: { formTemplateId }, orderBy: { updatedAt: "desc" } });
+  const rows = await prisma.submission.findMany({ where: { formTemplateId, isTest: false }, orderBy: { updatedAt: "desc" } });
+  return rows.map(toSubmission);
+}
+
+export async function getTestSubmissionsByForm(formTemplateId: string): Promise<Submission[]> {
+  const rows = await prisma.submission.findMany({ where: { formTemplateId, isTest: true }, orderBy: { updatedAt: "desc" } });
   return rows.map(toSubmission);
 }
 

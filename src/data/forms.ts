@@ -13,6 +13,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 4,
+      status: "published",
       publishedAt: "2026-05-02T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "facility_name", label: "Facility name", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -34,6 +35,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 1,
     currentVersion: {
       versionNo: 3,
+      status: "published",
       publishedAt: "2026-05-14T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "delivery_id", label: "Delivery ID", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -58,6 +60,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 1,
     currentVersion: {
       versionNo: 5,
+      status: "published",
       publishedAt: "2026-05-20T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "origin", label: "Origin", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -81,6 +84,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 2,
+      status: "published",
       publishedAt: "2026-05-08T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "lot_id", label: "Lot ID", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -102,6 +106,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 6,
+      status: "published",
       publishedAt: "2026-06-01T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "batch_id", label: "Batch ID", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -123,6 +128,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 2,
+      status: "published",
       publishedAt: "2026-05-11T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "sample_id", label: "Sample ID", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -143,6 +149,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-05-11T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "coa_scan", label: "COA document", fieldType: "document_scan", isRequired: true, sortOrder: 1, validations: [] },
@@ -163,6 +170,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 1,
     currentVersion: {
       versionNo: 2,
+      status: "published",
       publishedAt: "2026-05-22T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "dispatch_code", label: "Dispatch code", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -183,6 +191,7 @@ const biocharForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-05-22T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "quantity_used_kg", label: "Quantity used (kg)", fieldType: "number", unit: "kg", isRequired: true, sortOrder: 1, validations: [] },
@@ -206,6 +215,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 2,
+      status: "published",
       publishedAt: "2026-05-04T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "electrolyzer_type", label: "Electrolyzer type", fieldType: "single_select", isRequired: true, sortOrder: 1, validations: [] },
@@ -228,6 +238,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-05-06T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "ppa_document", label: "PPA document", fieldType: "document_scan", isRequired: true, sortOrder: 1, validations: [{ id: "v1", label: "OCR confidence", kind: "ocr_confidence", outcome: "send_to_review", detail: "Low-confidence extraction routed to manual review." }] },
@@ -250,6 +261,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 3,
+      status: "published",
       publishedAt: "2026-06-10T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "electricity_draw_kwh", label: "Electricity draw (kWh)", fieldType: "lookup_select", unit: "kWh", isRequired: true, sortOrder: 1, lookupSource: { kind: "device_telemetry", label: "Grid Smart Meter / Import", deviceId: "device-gh-smart-meter", telemetryParameterCode: "grid_import_kwh", refreshSeconds: 3600 }, validations: [] },
@@ -270,6 +282,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 1,
     currentVersion: {
       versionNo: 4,
+      status: "published",
       publishedAt: "2026-06-12T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "batch_id", label: "Batch ID", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -292,6 +305,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-06-12T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "linked_batch", label: "Linked production batch", fieldType: "linked_record", isRequired: true, sortOrder: 1, linkedFormTemplateId: "form-gh-production-batch", validations: [] },
@@ -311,6 +325,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 2,
+      status: "published",
       publishedAt: "2026-06-14T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "linked_batch", label: "Source production batch", fieldType: "linked_record", isRequired: true, sortOrder: 1, linkedFormTemplateId: "form-gh-production-batch", validations: [] },
@@ -331,6 +346,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-06-14T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "vessel_id", label: "Vessel ID", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -350,6 +366,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 2,
+      status: "published",
       publishedAt: "2026-06-16T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "mode", label: "Mode", fieldType: "single_select", isRequired: true, sortOrder: 1, validations: [] },
@@ -370,6 +387,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-06-16T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "quantity_loaded_kg", label: "Quantity loaded (kg)", fieldType: "number", unit: "kg", isRequired: true, sortOrder: 1, validations: [{ id: "v1", label: "Mass-balance reconciliation", kind: "reconciliation", outcome: "hard_stop", detail: "Output cannot exceed the linked conversion batch's input." }] },
@@ -389,6 +407,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-06-16T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "linked_conversion_batch", label: "Linked conversion batch", fieldType: "linked_record", isRequired: true, sortOrder: 1, linkedFormTemplateId: "form-gh-conversion", validations: [] },
@@ -408,6 +427,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-06-16T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "buyer", label: "Buyer", fieldType: "short_text", isRequired: true, sortOrder: 1, validations: [] },
@@ -428,6 +448,7 @@ const greenHydrogenForms: FormTemplate[] = [
     needsFixCount: 0,
     currentVersion: {
       versionNo: 1,
+      status: "published",
       publishedAt: "2026-06-16T00:00:00Z",
       fields: [
         { id: "f1", fieldCode: "registry", label: "Registry", fieldType: "single_select", isRequired: true, sortOrder: 1, validations: [] },

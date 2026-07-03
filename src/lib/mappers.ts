@@ -16,6 +16,7 @@ import type {
   Connector as ConnectorRow,
   Device as DeviceRow,
   TelemetryStream as TelemetryStreamRow,
+  Notification as NotificationRow,
 } from "@prisma/client";
 import type {
   Organization,
@@ -40,6 +41,8 @@ import type {
   TelemetryStream,
   TelemetryPoint,
   ChainOfCustodyMode,
+  Notification,
+  NotificationType,
 } from "@/types";
 
 export function toDomainPack(row: DomainPackRow): DomainPack {
@@ -122,7 +125,8 @@ export function toFormTemplate(row: FormTemplateRow, version: FormTemplateVersio
     needsFixCount: counts.needsFixCount,
     currentVersion: {
       versionNo: version.versionNo,
-      publishedAt: version.publishedAt.toISOString(),
+      status: version.status as FormTemplate["currentVersion"]["status"],
+      publishedAt: version.publishedAt ? version.publishedAt.toISOString() : null,
       fields: version.fields as unknown as FormFieldDefinition[],
     },
   };
@@ -160,6 +164,7 @@ export function toSubmission(row: SubmissionRow): Submission {
     reviewActions: row.reviewActions as unknown as ReviewActionRecord[],
     linkedSubmissionIds: row.linkedSubmissionIds.length > 0 ? row.linkedSubmissionIds : undefined,
     smartCheckSummary: row.smartCheckSummary,
+    isTest: row.isTest,
   };
 }
 
@@ -185,6 +190,19 @@ export function toDevice(row: DeviceRow): Device {
     coveragePct: row.coveragePct,
     lastGapMinutes: row.lastGapMinutes ?? undefined,
     tags: row.tags as unknown as TelemetryTag[],
+  };
+}
+
+export function toNotification(row: NotificationRow): Notification {
+  return {
+    id: row.id,
+    userId: row.userId,
+    type: row.type as NotificationType,
+    title: row.title,
+    body: row.body,
+    formTemplateId: row.formTemplateId ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+    readAt: row.readAt ? row.readAt.toISOString() : undefined,
   };
 }
 

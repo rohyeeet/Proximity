@@ -111,8 +111,8 @@ export function autoArrangeFlow(
     nodesByLayer.set(layerIndex, list);
   }
 
-  const COLUMN_WIDTH = 320;
-  const ROW_HEIGHT = 190;
+  const COLUMN_WIDTH = 360;
+  const ROW_HEIGHT = 210;
   const positions: { id: string; position: { x: number; y: number } }[] = [];
   for (const [layerIndex, ids] of nodesByLayer.entries()) {
     const offset = ((ids.length - 1) * ROW_HEIGHT) / 2;
@@ -211,6 +211,21 @@ export function validateFlow(
   for (const node of nodes) {
     if (!reached.has(node.id) && (hasIncoming.has(node.id) || hasOutgoing.has(node.id))) {
       errors.push({ id: nextId(), severity: "error", message: `"${node.label}" is unreachable from the start of the flow.`, nodeId: node.id });
+    }
+  }
+
+  const starts = nodes.filter((node) => node.nodeType === "start");
+  if (nodes.length > 0 && starts.length === 0) {
+    warnings.push({ id: nextId(), severity: "warning", message: "This flow has no start node marking where the process begins." });
+  }
+  for (const start of starts) {
+    if (hasIncoming.has(start.id)) {
+      warnings.push({
+        id: nextId(),
+        severity: "warning",
+        message: `Start node "${start.label}" has incoming edges — start nodes should be roots.`,
+        nodeId: start.id,
+      });
     }
   }
 

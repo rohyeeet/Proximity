@@ -4,7 +4,7 @@ import { signIn } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 
 const DEMO_ACCOUNTS = [
-  { email: "rohit.singh@varaha.com", role: "Super Admin — every organization" },
+  { email: "rohit142001singh@gmail.com", role: "Super Admin — every organization" },
   { email: "arun.kumar@varaha.com", role: "Org Admin — Varaha South" },
   { email: "sara.rao@varaha.com", role: "Reviewer (Lab Technician) — view-only Studio" },
   { email: "deepak.sharma@varaha.com", role: "Submitter (Field Surveyor) — view-only Studio" },

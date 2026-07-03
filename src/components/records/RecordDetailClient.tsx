@@ -7,16 +7,20 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { ReviewStatusChip, SyncStatusChip } from "@/components/ui/StatusChip";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
-import type { FormTemplate, ReviewActionRecord, Submission } from "@/types";
+import type { FormFieldDefinition, FormTemplate, ReviewActionRecord, Submission } from "@/types";
 
 const evidenceIcon = { photo: FileImage, document_scan: ScanLine, gps_log: MapPin, signature: PenTool };
 
 export function RecordDetailClient({
   form,
+  fields,
+  isStaleVersion,
   submission,
   submitterName,
 }: {
   form: FormTemplate;
+  fields: FormFieldDefinition[];
+  isStaleVersion: boolean;
   submission: Submission;
   submitterName: string;
 }) {
@@ -69,6 +73,12 @@ export function RecordDetailClient({
           <p className="mt-1 text-[13px] text-ink-soft">
             {form.name} · v{submission.formTemplateVersionNo} · submitted by {submitterName}
           </p>
+          {isStaleVersion && (
+            <p className="mt-2 inline-flex items-center rounded-md border border-warn-text/30 bg-warn-bg px-2.5 py-1 text-[12px] text-warn-text">
+              This form has changed since this record was submitted — answers below reflect the fields from v{submission.formTemplateVersionNo},
+              not the current v{form.currentVersion.versionNo}.
+            </p>
+          )}
         </div>
       </div>
 
@@ -80,7 +90,7 @@ export function RecordDetailClient({
             </CardHeader>
             <CardBody>
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {form.currentVersion.fields.map((field) => {
+                {fields.map((field) => {
                   const answer = submission.answers.find((a) => a.fieldCode === field.fieldCode)?.value;
                   const isEmpty = answer === "" || answer === undefined || answer === null;
                   return (

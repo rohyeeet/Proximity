@@ -18,13 +18,12 @@ export async function POST(request: Request) {
   if (stage) category = stage.name;
 
   const id = genId("form-custom");
-  const now = new Date();
   const [form, version] = await prisma.$transaction([
     prisma.formTemplate.create({
       data: { id, domainPackId, code: id.replace(/-/g, "_"), name: "Untitled form", description: "", category },
     }),
     prisma.formTemplateVersion.create({
-      data: { formTemplateId: id, versionNo: 0, publishedAt: now, fields: [] },
+      data: { formTemplateId: id, versionNo: 0, status: "draft", publishedAt: null, fields: [] },
     }),
   ]);
 

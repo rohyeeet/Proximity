@@ -27,7 +27,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!version) return NextResponse.json({ error: "Form has no version" }, { status: 500 });
 
   if (body.fields !== undefined) {
-    version = await prisma.formTemplateVersion.update({ where: { id: version.id }, data: { fields: body.fields } });
+    if (version.status === "published") {
+      // The latest version is immutable history — open a new draft to carry this edit forward
+      // instead of mutating what's already been published.
+      version = await prisma.formTemplateVersion.create({
+        data: { formTemplateId: id, versionNo: version.versionNo + 1, status: "draft", publishedAt: null, fields: body.fields },
+      });
+    } else {
+      version = await prisma.formTemplateVersion.update({ where: { id: version.id }, data: { fields: body.fields } });
+    }
   }
 
   const counts = await getFormCounts(id);

@@ -9,3 +9,8 @@ import type { RoleTier } from "@/types";
 export function canEditStudio(tier: RoleTier): boolean {
   return tier === "platform" || tier === "org_admin" || tier === "org_sub_admin" || tier === "designer";
 }
+
+/** Deleting a stage is irreversible — deliberately stricter than canEditStudio, admin-tier only. */
+export function canDeleteStage(tier: RoleTier): boolean {
+  return tier === "platform" || tier === "org_admin";
+}

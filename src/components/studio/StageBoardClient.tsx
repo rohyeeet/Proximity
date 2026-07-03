@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowRight, ArrowUp, BookOpen, Plus, Trash2 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { useStudio } from "@/lib/studio";
-import { canEditStudio } from "@/lib/permissions";
+import { canEditStudio, canDeleteStage } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchPicker } from "@/components/ui/SearchPicker";
 import { EditableText } from "@/components/ui/EditableText";
+import { Modal } from "@/components/ui/Modal";
 import { ConnectorPicker } from "./ConnectorPicker";
 import { KnowledgeProvider, useKnowledge } from "./knowledge/KnowledgeContext";
 import { KnowledgeDrawer } from "./knowledge/KnowledgeDrawer";
@@ -31,10 +32,23 @@ function StageBoardInner() {
   const router = useRouter();
   const { session } = useSession();
   const { openList } = useKnowledge();
-  const { stages, forms, flows, createStage, moveStage, updateStage, createFormInStage, addFormToStage, removeFormFromStage, moveFormInStage, createFlow } =
-    useStudio();
+  const {
+    stages,
+    forms,
+    flows,
+    createStage,
+    deleteStage,
+    moveStage,
+    updateStage,
+    createFormInStage,
+    addFormToStage,
+    removeFormFromStage,
+    moveFormInStage,
+    createFlow,
+  } = useStudio();
 
   const canEdit = canEditStudio(session.role.tier);
+  const canDelete = canDeleteStage(session.role.tier);
   const domainPackId = session.organization.domainPackId;
   const orgStages = stages.filter((stage) => stage.domainPackId === domainPackId);
   const stagedFormIds = new Set(orgStages.flatMap((stage) => stage.formTemplateIds));
@@ -85,7 +99,9 @@ function StageBoardInner() {
             availableForms={availableForms}
             organizationId={session.organization.id}
             canEdit={canEdit}
+            canDelete={canDelete}
             onMove={(direction) => moveStage(stage.id, direction)}
+            onDeleteStage={() => deleteStage(stage.id)}
             onChange={(patch) => updateStage(stage.id, (prev) => ({ ...prev, ...patch }))}
             onNewForm={async () => {
               const id = await createFormInStage(stage.id);
@@ -118,7 +134,9 @@ function StageCard({
   availableForms,
   organizationId,
   canEdit,
+  canDelete,
   onMove,
+  onDeleteStage,
   onChange,
   onNewForm,
   onAddExisting,
@@ -133,7 +151,9 @@ function StageCard({
   availableForms: FormTemplate[];
   organizationId: string;
   canEdit: boolean;
+  canDelete: boolean;
   onMove: (direction: -1 | 1) => void;
+  onDeleteStage: () => void;
   onChange: (patch: Partial<Stage>) => void;
   onNewForm: () => void;
   onAddExisting: (formId: string) => void;
@@ -141,6 +161,8 @@ function StageCard({
   onMoveForm: (formId: string, direction: -1 | 1) => void;
 }) {
   const [addingExisting, setAddingExisting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const formsById = new Map(allForms.map((form) => [form.id, form]));
   const stageForms = stage.formTemplateIds.map((id) => formsById.get(id)).filter((form): form is FormTemplate => Boolean(form));
 
@@ -190,9 +212,54 @@ function StageCard({
             >
               <ArrowDown className="size-4" />
             </button>
+            {canDelete && (
+              <button
+                aria-label="Delete stage"
+                onClick={() => setConfirmingDelete(true)}
+                className="flex size-7 items-center justify-center rounded text-ink-soft hover:bg-critical-bg hover:text-critical-text"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      <Modal
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        title={`Delete "${stage.name}"?`}
+        description="This action is permanent and cannot be undone."
+      >
+        <div className="flex flex-col gap-3">
+          {stage.formTemplateIds.length > 0 && (
+            <p className="rounded-md border border-warn-text/30 bg-warn-bg px-3 py-2 text-[13px] text-warn-text">
+              {stage.formTemplateIds.length} form{stage.formTemplateIds.length > 1 ? "s are" : " is"} currently assigned to this stage.
+              They won&apos;t be deleted, but will be unassigned from any stage.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  await onDeleteStage();
+                  setConfirmingDelete(false);
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete stage"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {(canEdit || stage.connectorIds.length > 0) && (
         <div className="mb-3 ml-7 flex items-center gap-2">

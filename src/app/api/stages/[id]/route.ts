@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireStudioEditAccess } from "@/lib/authz";
+import { requireStudioEditAccess, requireStageDeleteAccess } from "@/lib/authz";
 import { toStage } from "@/lib/mappers";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,4 +23,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
 
   return NextResponse.json(toStage(updated));
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const existing = await prisma.stage.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Stage not found" }, { status: 404 });
+
+  const access = await requireStageDeleteAccess(existing.domainPackId);
+  if (!access.ok) return NextResponse.json({ error: access.message }, { status: access.status });
+
+  await prisma.stage.delete({ where: { id } });
+
+  return new NextResponse(null, { status: 204 });
 }

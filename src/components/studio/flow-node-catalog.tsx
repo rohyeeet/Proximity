@@ -1,4 +1,4 @@
-import { FileText, GitBranch, CheckCircle2, RotateCcw, Zap, GitFork, Clock, FileSignature, Flag, type LucideIcon } from "lucide-react";
+import { PlayCircle, FileText, GitBranch, CheckCircle2, RotateCcw, Zap, GitFork, Clock, FileSignature, Flag, type LucideIcon } from "lucide-react";
 import type { FlowNodeType } from "@/types";
 
 export interface FlowNodeMeta {
@@ -10,6 +10,7 @@ export interface FlowNodeMeta {
 }
 
 export const flowNodeCatalog: FlowNodeMeta[] = [
+  { type: "start", label: "Start", icon: PlayCircle, className: "border-brand-600 bg-brand-600 text-white", paletteHint: "Marks where the process begins" },
   { type: "form_step", label: "Form step", icon: FileText, className: "border-border-strong bg-surface", paletteHint: "Submitter fills a form" },
   { type: "branch", label: "Branch", icon: GitBranch, className: "border-warn-text/50 bg-warn-bg", paletteHint: "Splits into conditional paths" },
   { type: "review_gate", label: "Review gate", icon: CheckCircle2, className: "border-brand-500/60 bg-brand-50", paletteHint: "Reviewer approves or returns" },
@@ -25,3 +26,17 @@ export const flowNodeMetaByType: Record<FlowNodeType, FlowNodeMeta> = flowNodeCa
   (acc, meta) => ({ ...acc, [meta.type]: meta }),
   {} as Record<FlowNodeType, FlowNodeMeta>
 );
+
+/** What logically tends to follow a node of this type — surfaced in the inspector as one-click "suggested next step" buttons. */
+export const suggestedNextTypes: Record<FlowNodeType, FlowNodeType[]> = {
+  start: ["form_step"],
+  form_step: ["review_gate", "branch", "automation", "form_step"],
+  branch: ["form_step", "review_gate", "automation"],
+  review_gate: ["correction_loop", "document", "form_step", "milestone"],
+  correction_loop: ["form_step"],
+  automation: ["form_step", "document", "milestone"],
+  parallel_group: ["form_step"],
+  wait: ["form_step", "automation"],
+  document: ["milestone", "form_step"],
+  milestone: [],
+};

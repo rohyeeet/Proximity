@@ -3,8 +3,9 @@
 import { Trash2 } from "lucide-react";
 import { EntityPicker } from "./EntityPicker";
 import { InfoHint } from "./knowledge/InfoHint";
+import { flowNodeMetaByType, suggestedNextTypes } from "./flow-node-catalog";
 import { useStudio } from "@/lib/studio";
-import type { FlowNodeDefinition } from "@/types";
+import type { FlowNodeDefinition, FlowNodeType } from "@/types";
 
 const roleTierOptions = ["submitter", "reviewer", "org_admin", "org_sub_admin", "designer", "viewer"];
 
@@ -13,11 +14,13 @@ export function FlowNodeInspector({
   domainPackId,
   onChange,
   onDelete,
+  onAddSuggested,
 }: {
   node: FlowNodeDefinition;
   domainPackId: string;
   onChange: (patch: Partial<FlowNodeDefinition>) => void;
   onDelete: () => void;
+  onAddSuggested?: (nodeType: FlowNodeType) => void;
 }) {
   const { getForm, getStage } = useStudio();
   const linkedForm = node.formTemplateId ? getForm(node.formTemplateId) : undefined;
@@ -87,6 +90,32 @@ export function FlowNodeInspector({
           {!linkedForm && (
             <p className="mt-1 text-[11.5px] text-warn-text">Not linked — this node won&apos;t collect data until it&apos;s connected to a form.</p>
           )}
+        </div>
+      )}
+
+      {onAddSuggested && suggestedNextTypes[node.nodeType].length > 0 && (
+        <div>
+          <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
+            Suggested next steps
+            <InfoHint topicId="flow-node-types" />
+          </p>
+          <div className="flex flex-col gap-1">
+            {suggestedNextTypes[node.nodeType].map((type) => {
+              const meta = flowNodeMetaByType[type];
+              const Icon = meta.icon;
+              return (
+                <button
+                  key={type}
+                  onClick={() => onAddSuggested(type)}
+                  title={meta.paletteHint}
+                  className="flex items-center gap-2 rounded-md border border-dashed border-border-strong px-2.5 py-1.5 text-left text-[13px] text-ink-soft hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700"
+                >
+                  <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+                  Add {meta.label.toLowerCase()}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

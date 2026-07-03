@@ -32,7 +32,7 @@ import { EditableText } from "@/components/ui/EditableText";
 import { useStudio } from "@/lib/studio";
 import { useSession } from "@/lib/session";
 import { canEditStudio } from "@/lib/permissions";
-import { BookOpen, RefreshCw } from "lucide-react";
+import { BookOpen, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
 import { autoArrangeFlow, validateFlow, type FlowIssue } from "@/lib/graph-utils";
 import { syncFlowWithStages } from "@/lib/flow-sync";
 import { cn, genId } from "@/lib/utils";
@@ -110,6 +110,7 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
   const [showValidation, setShowValidation] = useState(false);
   const [syncSummary, setSyncSummary] = useState<string[] | null>(null);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   function refitView() {
     window.setTimeout(() => reactFlow.fitView({ padding: 0.15, duration: 300 }), 50);
@@ -121,6 +122,20 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
     setEdges(toRfEdges(flow, selection));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, selection]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreen]);
+
+  useEffect(() => {
+    if (fullscreen) refitView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreen]);
 
   if (!flow) {
     return <EmptyState title="This flow no longer exists." />;
@@ -247,7 +262,7 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
   const dirty = isFlowDirty(flow.id);
 
   return (
-    <div>
+    <div className={cn(fullscreen && "fixed inset-0 z-50 flex flex-col overflow-y-auto bg-paper p-4")}>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <EditableText
@@ -286,6 +301,10 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
           )}
           <Button variant="secondary" size="sm" onClick={runValidate}>
             Validate graph
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setFullscreen((f) => !f)}>
+            {fullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            {fullscreen ? "Exit fullscreen" : "Fullscreen"}
           </Button>
           {canEdit && (
             <Button variant="primary" size="sm" onClick={handlePublish}>
@@ -350,7 +369,11 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
 
       <div
         className="grid gap-4"
-        style={{ gridTemplateColumns: canEdit ? `${paletteCollapsed ? "48px" : "220px"} 1fr 300px` : "1fr 300px" }}
+        style={{
+          gridTemplateColumns: canEdit
+            ? `${paletteCollapsed ? "48px" : fullscreen ? "240px" : "220px"} 1fr ${fullscreen ? "340px" : "300px"}`
+            : `1fr ${fullscreen ? "340px" : "300px"}`,
+        }}
       >
         {canEdit && (
           <FlowNodePalette
@@ -361,7 +384,7 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
           />
         )}
 
-        <div className="h-[70vh] min-h-[420px] rounded-lg border border-border bg-sunken/30">
+        <div className={cn("rounded-lg border border-border bg-sunken/30", fullscreen ? "h-[calc(100vh-180px)]" : "h-[70vh] min-h-[420px]")}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -387,7 +410,7 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
           </ReactFlow>
         </div>
 
-        <div className="overflow-y-auto rounded-lg border border-border bg-surface p-4">
+        <div className={cn("overflow-y-auto rounded-lg border border-border bg-surface p-4", fullscreen && "h-[calc(100vh-180px)]")}>
           <fieldset disabled={!canEdit} className="contents border-0 p-0 m-0">
             {selectedNode && (
               <FlowNodeInspector
@@ -395,6 +418,7 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
                 domainPackId={flow.domainPackId}
                 onChange={(patch) => updateFlow(flow.id, (prev) => ({ ...prev, nodes: prev.nodes.map((n) => (n.id === selectedNode.id ? { ...n, ...patch } : n)) }))}
                 onDelete={() => deleteNode(selectedNode.id)}
+                onAddSuggested={canEdit ? handleAddNode : undefined}
               />
             )}
             {selectedEdge && (

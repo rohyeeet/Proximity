@@ -67,8 +67,9 @@ model User {
   // admin isn't "a member" of any one org) — matches src/types/identity.ts's CurrentSession.isPlatformAdmin.
   isPlatformAdmin Boolean @default(false)
 
-  memberships OrgMembership[]
-  submissions Submission[]    @relation("SubmittedBy")
+  memberships   OrgMembership[]
+  submissions   Submission[]   @relation("SubmittedBy")
+  notifications Notification[]
 }
 
 model Role {
@@ -140,10 +141,14 @@ model FormTemplate {
 }
 
 model FormTemplateVersion {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   formTemplateId String
   versionNo      Int
-  publishedAt    DateTime
+  // "draft" (actively edited, mutable) | "published" (immutable history — never mutated again once set).
+  // A form has at most one draft row at a time; every published row is permanent history, which is
+  // what lets old submissions keep rendering against the exact fields they were submitted under.
+  status         String    @default("draft")
+  publishedAt    DateTime?
   fields         Json // FormFieldDefinition[] — validations, visibility rules, lookup sources, link filters, all nested
 
   formTemplate FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
@@ -187,6 +192,9 @@ model Submission {
   reviewActions         Json // ReviewActionRecord[]
   linkedSubmissionIds   String[]
   smartCheckSummary     String
+  // Sample submissions made from the Form Builder's Preview panel to test a form before
+  // publishing — excluded from Records lists and FormTemplate submission counts by default.
+  isTest                Boolean  @default(false)
 
   formTemplate FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
   submittedBy  User         @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
@@ -241,4 +249,21 @@ model TelemetryStream {
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@unique([deviceId, parameterCode])
+}
+
+// ---------- Notifications ----------
+
+model Notification {
+  id             String    @id @default(cuid())
+  userId         String
+  type           String // "form_published" | ...
+  title          String
+  body           String
+  formTemplateId String?
+  createdAt      DateTime  @default(now())
+  readAt         DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

@@ -88,6 +88,7 @@ async function main() {
       },
       update: {
         fullName: user.fullName,
+        email: user.email,
         avatarInitials: user.avatarInitials,
         status: user.status,
         isPlatformAdmin: user.isPlatformAdmin ?? false,
@@ -180,11 +181,13 @@ async function main() {
       create: {
         formTemplateId: form.id,
         versionNo: form.currentVersion.versionNo,
-        publishedAt: new Date(form.currentVersion.publishedAt),
+        status: "published",
+        publishedAt: form.currentVersion.publishedAt ? new Date(form.currentVersion.publishedAt) : new Date(),
         fields: form.currentVersion.fields as object,
       },
       update: {
-        publishedAt: new Date(form.currentVersion.publishedAt),
+        status: "published",
+        publishedAt: form.currentVersion.publishedAt ? new Date(form.currentVersion.publishedAt) : new Date(),
         fields: form.currentVersion.fields as object,
       },
     });
@@ -288,6 +291,7 @@ async function main() {
         reviewActions: submission.reviewActions as object,
         linkedSubmissionIds: submission.linkedSubmissionIds ?? [],
         smartCheckSummary: submission.smartCheckSummary,
+        isTest: false,
       },
       update: {
         reviewStatus: submission.reviewStatus,

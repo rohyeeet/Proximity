@@ -48,4 +48,5 @@ export interface Submission {
   reviewActions: ReviewActionRecord[];
   linkedSubmissionIds?: string[];
   smartCheckSummary: string;
+  isTest?: boolean;
 }

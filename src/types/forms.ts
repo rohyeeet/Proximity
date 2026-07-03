@@ -99,7 +99,8 @@ export interface FormFieldDefinition {
 
 export interface FormTemplateVersion {
   versionNo: number;
-  publishedAt: string;
+  status: "draft" | "published";
+  publishedAt: string | null;
   fields: FormFieldDefinition[];
 }
 
