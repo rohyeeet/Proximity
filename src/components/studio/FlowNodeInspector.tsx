@@ -93,29 +93,37 @@ export function FlowNodeInspector({
         </div>
       )}
 
-      {onAddSuggested && suggestedNextTypes[node.nodeType].length > 0 && (
+      {onAddSuggested && (
         <div>
           <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
             Suggested next steps
             <InfoHint topicId="flow-node-types" />
           </p>
-          <div className="flex flex-col gap-1">
-            {suggestedNextTypes[node.nodeType].map((type) => {
-              const meta = flowNodeMetaByType[type];
-              const Icon = meta.icon;
-              return (
-                <button
-                  key={type}
-                  onClick={() => onAddSuggested(type)}
-                  title={meta.paletteHint}
-                  className="flex items-center gap-2 rounded-md border border-dashed border-border-strong px-2.5 py-1.5 text-left text-[13px] text-ink-soft hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700"
-                >
-                  <Icon className="size-3.5 shrink-0" strokeWidth={2} />
-                  Add {meta.label.toLowerCase()}
-                </button>
-              );
-            })}
-          </div>
+          {suggestedNextTypes[node.nodeType].length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {suggestedNextTypes[node.nodeType].map((type) => {
+                const meta = flowNodeMetaByType[type];
+                const Icon = meta.icon;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => onAddSuggested(type)}
+                    title={meta.paletteHint}
+                    className="flex items-center gap-2 rounded-md border border-dashed border-border-strong px-2.5 py-1.5 text-left text-[13px] text-ink-soft hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700"
+                  >
+                    <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+                    Add {meta.label.toLowerCase()}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed border-border bg-sunken px-2.5 py-2 text-[12px] text-ink-soft">
+              {node.nodeType === "milestone"
+                ? "Milestones are terminal — nothing typically follows this step."
+                : "Nothing specific is suggested after this step. Pick a module from the palette on the left instead."}
+            </p>
+          )}
         </div>
       )}
     </div>

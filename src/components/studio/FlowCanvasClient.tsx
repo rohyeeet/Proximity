@@ -32,7 +32,7 @@ import { EditableText } from "@/components/ui/EditableText";
 import { useStudio } from "@/lib/studio";
 import { useSession } from "@/lib/session";
 import { canEditStudio } from "@/lib/permissions";
-import { BookOpen, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
+import { BookOpen, RefreshCw, Maximize2, Minimize2, LayoutGrid, CheckCircle2 } from "lucide-react";
 import { autoArrangeFlow, validateFlow, type FlowIssue } from "@/lib/graph-utils";
 import { syncFlowWithStages } from "@/lib/flow-sync";
 import { cn, genId } from "@/lib/utils";
@@ -83,6 +83,19 @@ function toRfEdges(flow: FlowTemplate, selection: Selection): Edge[] {
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
     };
   });
+}
+
+function ToolbarIconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className="flex size-8 items-center justify-center rounded-md border border-border-strong bg-surface text-ink-soft hover:bg-sunken hover:text-ink"
+    >
+      {children}
+    </button>
+  );
 }
 
 export function FlowCanvasClient({ flowId }: { flowId: string }) {
@@ -297,23 +310,24 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
             {!canEdit && <StatusChip label="View only" tone="hold" />}
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={openList}>
-            <BookOpen className="size-3.5" /> Guide
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <ToolbarIconButton label="Guide" onClick={openList}>
+            <BookOpen className="size-4" />
+          </ToolbarIconButton>
           {canEdit && (
-            <Button variant="secondary" size="sm" onClick={handleSync}>
-              <RefreshCw className="size-3.5" /> Sync from stages
-            </Button>
+            <ToolbarIconButton label="Sync from stages" onClick={handleSync}>
+              <RefreshCw className="size-4" />
+            </ToolbarIconButton>
           )}
           {canEdit && (
-            <Button variant="secondary" size="sm" onClick={handleAutoArrange}>
-              Auto-arrange
-            </Button>
+            <ToolbarIconButton label="Auto-arrange" onClick={handleAutoArrange}>
+              <LayoutGrid className="size-4" />
+            </ToolbarIconButton>
           )}
-          <Button variant="secondary" size="sm" onClick={runValidate}>
-            Validate graph
-          </Button>
+          <ToolbarIconButton label="Validate graph" onClick={runValidate}>
+            <CheckCircle2 className="size-4" />
+          </ToolbarIconButton>
+          <div className="mx-1 h-5 w-px bg-border" />
           <Button variant="secondary" size="sm" onClick={() => setFullscreen((f) => !f)}>
             {fullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
             {fullscreen ? "Exit fullscreen" : "Fullscreen"}
@@ -327,15 +341,6 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
       </div>
 
       <KnowledgeDrawer />
-
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        {flowNodeCatalog.map((item) => (
-          <span key={item.type} className="flex items-center gap-1.5 text-[12px] text-ink-soft">
-            <span className={`size-2.5 rounded-sm border ${item.className}`} />
-            {item.label}
-          </span>
-        ))}
-      </div>
 
       {syncSummary && (
         <div className="mb-3 rounded-lg border border-border bg-surface p-3">
