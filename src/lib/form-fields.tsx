@@ -1,7 +1,46 @@
 "use client";
 
 import { LinkedRecordPicker } from "@/components/collect/LinkedRecordPicker";
-import type { FormFieldDefinition } from "@/types";
+import { PhotoCaptureField } from "@/components/collect/capture/PhotoCaptureField";
+import { DocumentScanCaptureField } from "@/components/collect/capture/DocumentScanCaptureField";
+import { SignatureCaptureField } from "@/components/collect/capture/SignatureCaptureField";
+import { GeoPointCaptureField } from "@/components/collect/capture/GeoPointCaptureField";
+import { GeoBoundaryCaptureField } from "@/components/collect/capture/GeoBoundaryCaptureField";
+import type { EvidenceFile, FormFieldDefinition } from "@/types";
+
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+}
+
+export function encodeGeoPoint(point: GeoPoint): string {
+  return JSON.stringify(point);
+}
+
+export function decodeGeoPoint(value: string): GeoPoint | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed?.lat === "number" && typeof parsed?.lng === "number" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function encodeGeoBoundary(points: GeoPoint[]): string {
+  return JSON.stringify(points);
+}
+
+export function decodeGeoBoundary(value: string): GeoPoint[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((p) => typeof p?.lat === "number" && typeof p?.lng === "number") : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Shared between the Form Builder's Preview panel and the field Collect app so both render
  * exactly the same field behavior (visibility rules, input types) — one engine, two surfaces. */
@@ -15,7 +54,13 @@ export function isFieldVisible(field: FormFieldDefinition, allFields: FormFieldD
 export const fieldInputClass = "w-full rounded-md border border-border-strong bg-paper px-2.5 py-1.5 text-[13.5px] text-ink";
 export const fieldDisabledClass = "w-full rounded-md border border-dashed border-border-strong bg-sunken px-2.5 py-1.5 text-[13.5px] text-ink-soft";
 
-export function renderFieldInput(field: FormFieldDefinition, value: string, onChange: (v: string) => void) {
+export function renderFieldInput(
+  field: FormFieldDefinition,
+  value: string,
+  onChange: (v: string) => void,
+  onEvidence?: (file: EvidenceFile) => void,
+  existingEvidence?: EvidenceFile[]
+) {
   switch (field.fieldType) {
     case "short_text":
     case "single_select":
@@ -74,6 +119,37 @@ export function renderFieldInput(field: FormFieldDefinition, value: string, onCh
       );
     case "calculated_field":
       return <input disabled value="(computed automatically)" className={fieldDisabledClass} />;
+    case "photo":
+      return (
+        <PhotoCaptureField
+          value={value}
+          onChange={onChange}
+          onEvidence={onEvidence}
+          existingFile={existingEvidence?.find((e) => e.id === value)}
+        />
+      );
+    case "document_scan":
+      return (
+        <DocumentScanCaptureField
+          value={value}
+          onChange={onChange}
+          onEvidence={onEvidence}
+          existingFile={existingEvidence?.find((e) => e.id === value)}
+        />
+      );
+    case "signature":
+      return (
+        <SignatureCaptureField
+          value={value}
+          onChange={onChange}
+          onEvidence={onEvidence}
+          existingFile={existingEvidence?.find((e) => e.id === value)}
+        />
+      );
+    case "geo_point":
+      return <GeoPointCaptureField value={value} onChange={onChange} />;
+    case "geo_boundary":
+      return <GeoBoundaryCaptureField value={value} onChange={onChange} />;
     default:
       return (
         <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-border-strong bg-sunken text-[12px] text-ink-soft">
@@ -84,7 +160,19 @@ export function renderFieldInput(field: FormFieldDefinition, value: string, onCh
 }
 
 /** Label + input + helper text, the one field row both surfaces render identically. */
-export function FieldRow({ field, value, onChange }: { field: FormFieldDefinition; value: string; onChange: (v: string) => void }) {
+export function FieldRow({
+  field,
+  value,
+  onChange,
+  onEvidence,
+  existingEvidence,
+}: {
+  field: FormFieldDefinition;
+  value: string;
+  onChange: (v: string) => void;
+  onEvidence?: (file: EvidenceFile) => void;
+  existingEvidence?: EvidenceFile[];
+}) {
   return (
     <div>
       <label className="mb-1 flex items-center gap-1 text-[13px] font-medium text-ink">
@@ -92,7 +180,7 @@ export function FieldRow({ field, value, onChange }: { field: FormFieldDefinitio
         {field.isRequired && <span className="text-critical-text">*</span>}
         {field.unit && <span className="text-[11.5px] font-normal text-ink-soft">({field.unit})</span>}
       </label>
-      {renderFieldInput(field, value, onChange)}
+      {renderFieldInput(field, value, onChange, onEvidence, existingEvidence)}
       {field.helperText && <p className="mt-1 text-[12px] text-ink-soft">{field.helperText}</p>}
     </div>
   );

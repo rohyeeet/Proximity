@@ -5,15 +5,20 @@ import { Monitor, Smartphone } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { isFieldVisible, FieldRow } from "@/lib/form-fields";
-import type { FormTemplate, Submission } from "@/types";
+import type { EvidenceFile, FormTemplate, Submission } from "@/types";
 
 export function FormPreviewPanel({ form }: { form: FormTemplate }) {
   const fields = form.currentVersion.fields;
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [evidence, setEvidence] = useState<EvidenceFile[]>([]);
   const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [testSubmissions, setTestSubmissions] = useState<Submission[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [justSubmitted, setJustSubmitted] = useState(false);
+
+  function addEvidence(file: EvidenceFile) {
+    setEvidence((prev) => [...prev.filter((e) => e.id !== file.id), file]);
+  }
 
   function loadTestSubmissions() {
     fetch(`/api/forms/${form.id}/submissions`)
@@ -41,10 +46,11 @@ export function FormPreviewPanel({ form }: { form: FormTemplate }) {
     setJustSubmitted(false);
     try {
       const payload = visibleFields.map((field) => ({ fieldCode: field.fieldCode, value: answers[field.fieldCode] ?? null }));
+      const usedEvidenceIds = new Set(payload.map((a) => a.value));
       const res = await fetch(`/api/forms/${form.id}/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: payload }),
+        body: JSON.stringify({ answers: payload, evidence: evidence.filter((e) => usedEvidenceIds.has(e.id)) }),
       });
       if (!res.ok) throw new Error(await res.text());
       setJustSubmitted(true);
@@ -97,6 +103,8 @@ export function FormPreviewPanel({ form }: { form: FormTemplate }) {
             field={field}
             value={answers[field.fieldCode] ?? ""}
             onChange={(v) => setAnswers((prev) => ({ ...prev, [field.fieldCode]: v }))}
+            onEvidence={addEvidence}
+            existingEvidence={evidence}
           />
         ))}
         {visibleFields.length > 0 && (

@@ -21,6 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const body = await request.json();
   const answers = Array.isArray(body.answers) ? body.answers : [];
+  const evidence = Array.isArray(body.evidence) ? body.evidence : [];
   const linkedSubmissionIds = deriveLinkedSubmissionIds(version.fields as unknown as FormFieldDefinition[], answers);
 
   const flowNode = await prisma.flowTemplate
@@ -42,7 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       currentVersionNo: 1,
       updatedAt: now,
       answers,
-      evidence: [],
+      evidence,
       versions: [{ versionNo: 1, answers, createdAt: now.toISOString(), createdByUserId: access.userId }],
       reviewActions: [],
       linkedSubmissionIds,

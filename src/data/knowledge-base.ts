@@ -60,6 +60,24 @@ export const knowledgeBase: KnowledgeTopic[] = [
       "For forms specifically: once a version is published, it's permanent — real submissions stay tied to the exact fields they were answered against, even after you publish a newer version with different fields. That's what lets old records keep making sense years later even as the form evolves.",
     ],
   },
+  {
+    id: "gs-export",
+    scope: "general",
+    category: "Core concepts",
+    title: "Exporting records for reporting",
+    summary: "\"Export to CSV\" on Records downloads every real submission, ready for a spreadsheet.",
+    steps: [
+      "Open Records for the form you want to report on.",
+      "Click \"Export to CSV\" (visible to reviewers and admins).",
+      "Open the downloaded file in Google Sheets, Excel, or Numbers.",
+    ],
+    body: [
+      "Columns are the form's current fields, in order, using their labels as headers — plus Display ID, Review Status, Sync Status, Submitted By, Submitted At, and Version up front. If an older submission predates a field that's since been added, that cell is simply blank.",
+      "Photo, document scan, and signature columns contain the real, working hosted URL for that file — click straight through from the spreadsheet. Geo point/boundary columns are written as plain \"lat, lng\" text.",
+      "Test submissions (made from a form's Preview panel before publishing) are never included — only real field data.",
+    ],
+    relatedTopicIds: ["form-media-capture"],
+  },
 
   // ---------- Flow ----------
   {
@@ -275,12 +293,31 @@ export const knowledgeBase: KnowledgeTopic[] = [
     title: "Field type categories",
     summary: "Basic input, structured capture, connector-backed, and relational/computed types.",
     body: [
-      "Basic input — short/long text, number, date, boolean, single/multi select.",
-      "Structured capture — geo point/boundary, photo, document scan, signature, repeat group.",
-      "Connector-backed — lookup / connector, which pulls its value from another form's records, a live device parameter, or an external database.",
-      "Relational & computed — linked record (a foreign key to another entity) and calculated field (derived automatically, not editable by submitters).",
+      "Basic input — short/long text, number, date, boolean, single/multi select. This is also how you capture regional metadata like country, state, and district: a single/multi select (or short text) field, same as any other answer — there's no separate \"location\" field type needed for that.",
+      "Structured capture — geo point/boundary, photo, document scan, signature, repeat group. Photo, document scan, and signature are real: they open the device camera or a file picker, upload to real hosted storage, and tag the photo/document with the submitter's GPS location at the moment of capture when the browser grants permission. Geo point captures a single GPS coordinate; geo boundary records an ordered sequence of points as you walk a perimeter, tapping \"Add point\" at each corner.",
+      "Connector-backed — lookup / connector, which pulls its value from another form's records (real, see \"Lookup / connector fields\"), a live device parameter, or an external database (both still placeholders, clearly labeled as not yet connected).",
+      "Relational & computed — linked record (a real foreign key to another entity — see \"Linked record fields\") and calculated field (derived automatically, not editable by submitters).",
     ],
-    relatedTopicIds: ["form-lookup-select", "form-linked-record"],
+    relatedTopicIds: ["form-lookup-select", "form-linked-record", "form-media-capture"],
+  },
+  {
+    id: "form-media-capture",
+    scope: "form",
+    category: "Rules & preview",
+    title: "Capturing photos, documents, signatures, and location",
+    summary: "Real camera/file capture, real hosted storage, real GPS — geotagged where possible.",
+    steps: [
+      "Photo: tap to open the camera (or choose from the gallery on desktop), takes the picture, and uploads it automatically — a thumbnail confirms it's saved.",
+      "Document scan: same capture/upload path as photo, just without forcing the camera specifically — a photo of a paper document or an existing file both work.",
+      "Signature: draw with a finger or mouse on the pad, then \"Done\" to save it, or \"Clear\" to redo it.",
+      "Geo point: \"Capture current location\" reads the device's GPS once and shows the coordinate.",
+      "Geo boundary: \"Add point\" repeatedly as you walk a plot's edges — each tap adds one more point to the ordered list.",
+    ],
+    body: [
+      "Every photo capture also tags itself with the submitter's GPS location at that exact moment, whenever the browser has location permission — this is separate from a geo point/boundary field, and happens automatically without the submitter doing anything extra.",
+      "Everything captured this way is a real file in real hosted storage — it shows up as an actual clickable link in the CSV export and in Records, not a placeholder.",
+    ],
+    relatedTopicIds: ["form-field-types", "gs-export"],
   },
   {
     id: "form-lookup-select",
@@ -360,9 +397,10 @@ export const knowledgeBase: KnowledgeTopic[] = [
     title: "Preview",
     summary: "A live, fillable rendering of the form — test it and submit real sample data before publishing.",
     body: [
-      "Preview renders the exact same fields and field logic (visibility rules, real lookup/linked-record pickers) a submitter would see in the Collect app, including a Desktop/Mobile toggle so you can check how it reads on a phone screen.",
-      "\"Submit test response\" creates a real, isolated sample submission — it's never shown in Records and never counted toward production totals, so you can try the whole form end to end (including picking a linked record) before publishing it for real use.",
+      "Preview renders the exact same fields and field logic (visibility rules, real lookup/linked-record pickers, real photo/document/signature/location capture) a submitter would see in the Collect app, including a Desktop/Mobile toggle so you can check how it reads on a phone screen.",
+      "\"Submit test response\" creates a real, isolated sample submission — including any photo, document, or signature you actually captured while testing — it's never shown in Records, never counted toward production totals, and never appears in the CSV export, so you can try the whole form end to end before publishing it for real use.",
     ],
+    relatedTopicIds: ["form-media-capture"],
   },
 ];
 

@@ -2,9 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Download } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { Tabs } from "@/components/ui/Tabs";
+import { Button } from "@/components/ui/Button";
 import { ReviewStatusChip, SyncStatusChip } from "@/components/ui/StatusChip";
+import { useSession } from "@/lib/session";
+import { canReview } from "@/lib/permissions";
 import { formatRelativeTime } from "@/lib/utils";
 import type { FormTemplate, Submission } from "@/types";
 
@@ -17,6 +21,7 @@ const filterOptions = [
 
 export function RecordsGridClient({ form, submissions }: { form: FormTemplate; submissions: Submission[] }) {
   const router = useRouter();
+  const { session } = useSession();
   const [filter, setFilter] = useState("all");
 
   const previewFields = form.currentVersion.fields.slice(0, 3);
@@ -50,11 +55,20 @@ export function RecordsGridClient({ form, submissions }: { form: FormTemplate; s
 
   return (
     <div className="flex flex-col gap-4">
-      <Tabs
-        value={filter}
-        onChange={setFilter}
-        options={filterOptions.map((option) => ({ ...option, count: counts[option.value as keyof typeof counts] }))}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs
+          value={filter}
+          onChange={setFilter}
+          options={filterOptions.map((option) => ({ ...option, count: counts[option.value as keyof typeof counts] }))}
+        />
+        {canReview(session.role.tier) && (
+          <a href={`/api/forms/${form.id}/export`} download>
+            <Button variant="secondary" size="sm">
+              <Download className="size-3.5" /> Export to CSV
+            </Button>
+          </a>
+        )}
+      </div>
       <DataTable
         columns={columns}
         rows={filtered}

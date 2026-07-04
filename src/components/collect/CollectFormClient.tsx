@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { isFieldVisible, FieldRow } from "@/lib/form-fields";
-import type { FormFieldDefinition } from "@/types";
+import type { EvidenceFile, FormFieldDefinition } from "@/types";
 
 export function CollectFormClient({
   formId,
@@ -14,6 +14,7 @@ export function CollectFormClient({
   formDescription,
   fields,
   initialAnswers,
+  initialEvidence,
   resubmitSubmissionId,
 }: {
   formId: string;
@@ -21,13 +22,19 @@ export function CollectFormClient({
   formDescription: string;
   fields: FormFieldDefinition[];
   initialAnswers: Record<string, string>;
+  initialEvidence?: EvidenceFile[];
   resubmitSubmissionId?: string;
 }) {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
+  const [evidence, setEvidence] = useState<EvidenceFile[]>(initialEvidence ?? []);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function addEvidence(file: EvidenceFile) {
+    setEvidence((prev) => [...prev.filter((e) => e.id !== file.id), file]);
+  }
 
   const visibleFields = useMemo(
     () =>
@@ -49,11 +56,12 @@ export function CollectFormClient({
     setSubmitting(true);
     try {
       const payload = visibleFields.map((field) => ({ fieldCode: field.fieldCode, value: answers[field.fieldCode] ?? null }));
+      const usedEvidenceIds = new Set(payload.map((a) => a.value));
       const url = resubmitSubmissionId ? `/api/submissions/${resubmitSubmissionId}/resubmit` : `/api/forms/${formId}/collect`;
       const res = await fetch(url, {
         method: resubmitSubmissionId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: payload }),
+        body: JSON.stringify({ answers: payload, evidence: evidence.filter((e) => usedEvidenceIds.has(e.id)) }),
       });
       if (!res.ok) throw new Error(await res.text());
       setSubmitted(true);
@@ -113,6 +121,8 @@ export function CollectFormClient({
             field={field}
             value={answers[field.fieldCode] ?? ""}
             onChange={(v) => setAnswers((prev) => ({ ...prev, [field.fieldCode]: v }))}
+            onEvidence={addEvidence}
+            existingEvidence={evidence}
           />
         ))}
       </div>

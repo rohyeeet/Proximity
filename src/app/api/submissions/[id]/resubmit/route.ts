@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { toSubmission } from "@/lib/mappers";
 import { deriveLinkedSubmissionIds, getFormTemplateVersionFields } from "@/lib/queries";
-import type { SubmissionAnswer, SubmissionVersionRecord } from "@/types";
+import type { EvidenceFile, SubmissionAnswer, SubmissionVersionRecord } from "@/types";
 
 /** A submitter fixing and resending a submission a reviewer returned for correction. Only the
  * original submitter can do this, and only while it's actually in "needs_fix" — resubmitting
@@ -25,6 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const body = await request.json();
   const answers: SubmissionAnswer[] = Array.isArray(body.answers) ? body.answers : [];
+  const evidence: EvidenceFile[] = Array.isArray(body.evidence) ? body.evidence : [];
   const now = new Date();
   const nextVersionNo = existing.currentVersionNo + 1;
   const priorVersions = existing.versions as unknown as SubmissionVersionRecord[];
@@ -38,6 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       reviewStatus: "needs_check",
       updatedAt: now,
       answers: answers as object,
+      evidence: evidence as object,
       linkedSubmissionIds,
       versions: [
         ...priorVersions,

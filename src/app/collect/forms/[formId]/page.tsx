@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getFormTemplate, getFormTemplateVersionFields, getLatestPublishedVersion, getSubmission } from "@/lib/queries";
 import { CollectFormClient } from "@/components/collect/CollectFormClient";
-import type { FormFieldDefinition } from "@/types";
+import type { EvidenceFile, FormFieldDefinition } from "@/types";
 
 export default async function CollectFormPage({
   params,
@@ -21,6 +21,7 @@ export default async function CollectFormPage({
 
   let fields: FormFieldDefinition[] | undefined;
   let initialAnswers: Record<string, string> = {};
+  let initialEvidence: EvidenceFile[] = [];
   let resubmitSubmissionId: string | undefined;
 
   if (resubmit) {
@@ -28,6 +29,7 @@ export default async function CollectFormPage({
     if (submission && submission.submittedByUserId === userId && submission.formTemplateId === formId && submission.reviewStatus === "needs_fix") {
       fields = await getFormTemplateVersionFields(formId, submission.formTemplateVersionNo);
       initialAnswers = Object.fromEntries(submission.answers.map((a) => [a.fieldCode, a.value === null || a.value === undefined ? "" : String(a.value)]));
+      initialEvidence = submission.evidence;
       resubmitSubmissionId = submission.id;
     }
   }
@@ -45,6 +47,7 @@ export default async function CollectFormPage({
       formDescription={form.description}
       fields={fields}
       initialAnswers={initialAnswers}
+      initialEvidence={initialEvidence}
       resubmitSubmissionId={resubmitSubmissionId}
     />
   );

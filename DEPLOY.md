@@ -2,11 +2,14 @@
 
 The app is a standard Next.js 15 (App Router) project backed by PostgreSQL via Prisma, with
 Auth.js (Credentials) for login. Nothing in the code is tied to a specific host — pick whichever
-path below fits. Both need the same two environment variables:
+path below fits. Both need the same environment variables:
 
 - `DATABASE_URL` — a standard Postgres connection string.
 - `AUTH_SECRET` — generate with `npx auth secret` (or `openssl rand -base64 32`). Use a
   **different** value per environment.
+- `BLOB_READ_WRITE_TOKEN` — only needed for photo/document-scan/signature capture. Currently
+  Vercel-Blob-specific (Option B/Cloud Run can run without it — those field types just won't
+  upload — or swap in any S3-compatible client behind the same `src/app/api/uploads/route.ts`).
 
 Copy `.env.example` to `.env` for local dev regardless of which path you deploy to.
 
@@ -17,13 +20,15 @@ Copy `.env.example` to `.env` for local dev regardless of which path you deploy 
 1. **Get a database.** [Neon](https://neon.tech) (free tier, ~2 minutes) or a Vercel Postgres
    store created from your Vercel project's Storage tab — same thing either way, it's just
    Postgres.
-2. **Push this repo to GitHub/GitLab**, then import it in Vercel (auto-detects Next.js).
-3. Add `DATABASE_URL` and `AUTH_SECRET` in Settings → Environment Variables.
-4. Set the build command to `prisma migrate deploy && next build` so schema changes ship with
+2. **Get a Blob store** (for media capture) — same Storage tab, "Create Database" → Blob. Its
+   `.env.local` tab shows the token to copy.
+3. **Push this repo to GitHub/GitLab**, then import it in Vercel (auto-detects Next.js).
+4. Add `DATABASE_URL`, `AUTH_SECRET`, and `BLOB_READ_WRITE_TOKEN` in Settings → Environment Variables.
+5. Set the build command to `prisma migrate deploy && next build` so schema changes ship with
    every deploy.
-5. Deploy. Vercel runs `npm install` (triggering the `postinstall: prisma generate` script) and
+6. Deploy. Vercel runs `npm install` (triggering the `postinstall: prisma generate` script) and
    then your build command.
-6. Seed it once: `DATABASE_URL="<your prod url>" npm run db:seed` from your machine (or a one-off
+7. Seed it once: `DATABASE_URL="<your prod url>" npm run db:seed` from your machine (or a one-off
    Vercel CLI/Cloud Shell run).
 
 ## Option B — Google Cloud (Cloud Run + Cloud SQL)
@@ -81,7 +86,9 @@ easiest way to see the RBAC view-only experience for real.
 
 ## What's still a prototype boundary
 
-See §8 of the architecture write-up for the full list — the short version: file uploads
-(photo/document-scan/signature fields) aren't wired to real storage yet because there's no
-end-user "fill out this form" runtime to attach them to, and the Analytics dashboards
-intentionally still read curated static sample data rather than live aggregation queries.
+- **geo_boundary** capture records an ordered list of GPS points (tap "Add point" while walking a
+  perimeter) — there's no live map rendering of the boundary in this pass.
+- **device_telemetry / external_db lookups** are still placeholders (clearly labeled "not yet
+  connected") — only "pick a prior submission" (internal_form) lookups and linked records are real.
+- The Analytics dashboards intentionally still read curated static sample data rather than live
+  aggregation queries.

@@ -18,6 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const body = await request.json();
   const answers = Array.isArray(body.answers) ? body.answers : [];
+  const evidence = Array.isArray(body.evidence) ? body.evidence : [];
 
   const submissionId = genId("submission-test");
   const submission = await prisma.submission.create({
@@ -33,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       currentVersionNo: 1,
       updatedAt: new Date(),
       answers,
-      evidence: [],
+      evidence,
       versions: [{ versionNo: 1, answers, createdAt: new Date().toISOString(), createdByUserId: access.userId }],
       reviewActions: [],
       linkedSubmissionIds: [],
