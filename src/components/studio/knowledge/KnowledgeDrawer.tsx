@@ -15,6 +15,14 @@ export function KnowledgeDrawer() {
     if (!q) return topics;
     return topics.filter((topic) => topic.title.toLowerCase().includes(q) || topic.summary.toLowerCase().includes(q));
   }, [topics, query]);
+  const grouped = useMemo(() => {
+    const groups = new Map<string, typeof filtered>();
+    for (const topic of filtered) {
+      const key = topic.category ?? "More";
+      groups.set(key, [...(groups.get(key) ?? []), topic]);
+    }
+    return [...groups.entries()];
+  }, [filtered]);
 
   const activeTopic = activeTopicId ? getKnowledgeTopic(activeTopicId) : null;
 
@@ -94,12 +102,19 @@ export function KnowledgeDrawer() {
               placeholder="Search the guide…"
               className="mb-3 w-full rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-soft/60"
             />
-            <div className="flex flex-col gap-1">
-              {filtered.map((topic) => (
-                <button key={topic.id} onClick={() => openTopic(topic.id)} className="rounded-md px-2.5 py-2 text-left hover:bg-sunken">
-                  <p className="text-[13.5px] font-medium text-ink">{topic.title}</p>
-                  <p className="text-[12px] text-ink-soft">{topic.summary}</p>
-                </button>
+            <div className="flex flex-col gap-4">
+              {grouped.map(([category, categoryTopics]) => (
+                <div key={category}>
+                  <p className="mb-1 px-2.5 text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">{category}</p>
+                  <div className="flex flex-col gap-1">
+                    {categoryTopics.map((topic) => (
+                      <button key={topic.id} onClick={() => openTopic(topic.id)} className="rounded-md px-2.5 py-2 text-left hover:bg-sunken">
+                        <p className="text-[13.5px] font-medium text-ink">{topic.title}</p>
+                        <p className="text-[12px] text-ink-soft">{topic.summary}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
               {filtered.length === 0 && <p className="px-2.5 py-2 text-[12.5px] text-ink-soft">No topics match.</p>}
             </div>

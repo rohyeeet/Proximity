@@ -34,15 +34,18 @@ export function FlowNodeInspector({
           Auto-synced from the <span className="font-medium">{sourceStage.name}</span> stage.
         </p>
       )}
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft">{node.nodeType.replace(/_/g, " ")}</p>
-        <button
-          aria-label="Delete node"
-          onClick={onDelete}
-          className="flex size-6 items-center justify-center rounded text-ink-soft hover:bg-critical-bg hover:text-critical-text"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+      <div>
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft">{node.nodeType.replace(/_/g, " ")}</p>
+          <button
+            aria-label="Delete node"
+            onClick={onDelete}
+            className="flex size-6 items-center justify-center rounded text-ink-soft hover:bg-critical-bg hover:text-critical-text"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
+        <p className="mt-1 text-[12.5px] leading-snug text-ink-soft">{flowNodeMetaByType[node.nodeType].description}</p>
       </div>
 
       <div>
