@@ -10,6 +10,8 @@ them, and every submission stays tied to the exact form definition it was collec
 It is multi-tenant (`Organization`), multi-domain (`DomainPack` — biochar and green hydrogen are the
 two shipped today), and role-gated end to end, from the UI down to the database write.
 
+**Live infrastructure** (owner access only): [Vercel project](https://vercel.com/rohit142001singh-gmailcoms-projects/proximity/6cp23xD5gaed7fT4VFeJTuKueZ1Z) · [Neon database console](https://console.neon.tech/app/projects/muddy-unit-39322524?branchId=br-silent-sunset-aqegpdl9)
+
 ## Contents
 
 - [Screenshots](#screenshots)
