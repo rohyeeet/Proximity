@@ -12,6 +12,7 @@ two shipped today), and role-gated end to end, from the UI down to the database 
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [What it does](#what-it-does)
 - [System architecture](#system-architecture)
 - [Domain model](#domain-model)
@@ -23,6 +24,27 @@ two shipped today), and role-gated end to end, from the UI down to the database 
 - [Local development](#local-development)
 - [Deployment](#deployment)
 - [Prototype boundaries](#prototype-boundaries--roadmap)
+
+## Screenshots
+
+All captured live against the real Postgres-backed app (seeded demo data, not mockups).
+
+| | |
+|---|---|
+| **Sign in** | **Overview dashboard** |
+| ![Login](docs/screenshots/01-login.png) | ![Dashboard](docs/screenshots/02-dashboard.png) |
+| **Forms & Stages** | **Form builder** |
+| ![Stage board](docs/screenshots/03-stage-board.png) | ![Form builder](docs/screenshots/04-form-builder.png) |
+| **Flow Studio** | **Records — per-form grid** |
+| ![Flow Studio](docs/screenshots/06-flow-studio.png) | ![Records grid](docs/screenshots/08-records-grid.png) |
+| **Record review** | **Connectors** |
+| ![Record detail](docs/screenshots/08b-record-detail.png) | ![Connectors](docs/screenshots/09-connectors.png) |
+| **Analytics (computed live)** | **Team & Access** |
+| ![Analytics](docs/screenshots/10-analytics.png) | ![Team & Access](docs/screenshots/11-team.png) |
+| **Admin — platform overview** | **Collect app (field submitter, mobile)** |
+| ![Admin](docs/screenshots/12-admin.png) | ![Collect](docs/screenshots/13-collect-mobile.png) |
+| **My submissions (mobile)** | **Filling a form with real device capture (mobile)** |
+| ![My submissions](docs/screenshots/14-collect-submissions-mobile.png) | ![Collect form](docs/screenshots/15-collect-form-mobile.png) |
 
 ## What it does
 
@@ -36,11 +58,18 @@ constraint:
 - **Connectors** — register the data sources a form can pull from or push to: internal lookups,
   external databases/REST APIs, or industrial protocols (OPC-UA, Modbus, MQTT/Sparkplug B) feeding
   live telemetry from devices.
+- **Collect** — a mobile-first app for the field submitter role: the forms assigned to *them*,
+  filled out with real device capture (camera photos, signature pad, GPS point/boundary walking,
+  document scan) and submitted for review.
 - **Records** — every submission against a published form, reviewable (approve / return for
-  correction), and rendered against the *exact* field definitions it was submitted under — even
-  after the form has since changed.
-- **Analytics** — program-level rollups (throughput, review backlog, telemetry health).
+  correction), CSV-exportable, and rendered against the *exact* field definitions it was submitted
+  under — even after the form has since changed.
+- **Analytics** — program-level rollups (throughput, review backlog, telemetry health), computed
+  live from each organization's own submission/device rows, not seed data.
 - **Admin** — platform-tier oversight across every organization and domain pack.
+
+Every read path above is tenant-isolated: a query always scopes to the caller's own organization(s),
+even when multiple organizations share the same `DomainPack`.
 
 ## System architecture
 
@@ -80,6 +109,18 @@ constraint:
   read/written as one unit and never queried field-by-field in SQL — form field definitions, flow
   node/edge graphs, submission answers. Everything that's ever filtered, joined, or counted in SQL
   (ids, statuses, foreign keys, sort order) is a real column.
+- **Multi-tenant isolation**: a `DomainPack` (e.g. biochar) can be shared by several `Organization`s.
+  Every read path that touches submissions, forms, flows, or stages threads the caller's own
+  `organizationId` through the query (`src/lib/queries.ts`) rather than scoping by domain pack alone
+  — one org can never read, export, or enumerate another org's records or process designs.
+- **File uploads**: photo, signature, document-scan, and geo-boundary evidence upload directly from
+  the browser to Vercel Blob storage via short-lived, auth-gated client tokens
+  (`src/app/api/uploads/route.ts`) — file bytes never pass through the Next.js server, avoiding
+  serverless body-size limits.
+- **Race-safe record linking**: when a form field links to another org's already-submitted record
+  and marks it exclusive (e.g. "this transport leg can only be claimed by one dispatch"), the claim
+  is re-checked inside a `Serializable`-isolation Postgres transaction at submit time, not just when
+  listing candidates — two submitters can't both claim the same upstream record.
 
 ## Domain model
 
@@ -165,17 +206,44 @@ Register internal lookups, external database/REST sources, or industrial-protoco
 (OPC-UA / Modbus / MQTT-Sparkplug B) that forms can bind to for live dropdowns or telemetry-fed
 automation. Each connector rolls up its bound `Device`s and their `TelemetryStream`s.
 
+### Collect (field submitter app)
+A separate, mobile-first surface (`/collect`) for the `submitter` role — not the Studio chrome, just
+the forms assigned to that person and their own submission history:
+- **Your forms** — every published form reachable from the submitter's org, with live "needs
+  correction" / "awaiting review" counts.
+- **Real device capture** — photo and document-scan fields open the camera/file picker and upload
+  straight to blob storage; signature fields are a real drawable pad; geo-point/geo-boundary fields
+  read the browser's Geolocation API (point capture or walk-and-record a boundary), not typed
+  coordinates.
+- **My submissions** — grouped by flow stage, filterable by status (pending / needs correction /
+  approved), with a sticky header for one-handed scrolling in the field.
+- **Correction loop** — a returned submission reopens in the same capture UI with the reviewer's
+  notes, and resubmits as a new version rather than overwriting history.
+- **Cross-form record linking** — a field can require picking an existing upstream record (e.g. a
+  transport leg must reference an approved feedstock delivery); exclusive links can only be claimed
+  once, enforced race-safely at submit time (see [System architecture](#system-architecture)).
+
 ### Records
 Every submission, reviewable with an approve / return-for-correction workflow, review history, and
 evidence attachments — rendered against the exact form-field definitions it was submitted under.
+Each form's record grid can be exported to CSV, scoped to the caller's own organization.
 
 ### Notifications
 A bell in the top bar with an unread-count badge. Publishing a form fans out a notification to every
 past real submitter ("this form changed, your data is safe under its original version") and a
 confirmation to the publisher.
 
+### Team & Access
+Real **Invite user** flow (creates the `User` + a pending `OrgMembership` against a chosen role) and
+an org ("partner") switcher for users who belong to more than one organization, gated the same way
+as everything else — an Org Admin manages their own org's members and custom roles; a platform admin
+can move between every organization.
+
 ### Analytics & Admin
-Program-level throughput/backlog/telemetry dashboards, and a platform-admin view across every
+Program-level throughput/backlog/telemetry dashboards computed live from each organization's real
+`Submission`/`Device` rows (approval rate, correction turnaround, evidence completeness, device
+coverage, weekly submission/correction trend) — an org with no activity yet gets an honest empty
+state, not fabricated numbers. Admin gives platform-tier users the same view across every
 organization and domain pack.
 
 ## Usage walkthrough
@@ -191,10 +259,11 @@ organization and domain pack.
    palette or the inspector's "Suggested next steps." **Validate graph**, then **Publish**.
 
 **Running the process (Submitter / Reviewer):**
-1. A submitter fills out a published form (Records currently seeds/reads this data; a live
-   submitter-facing fill-and-submit runtime is the next phase — see [Roadmap](#prototype-boundaries--roadmap)).
-2. A reviewer opens the submission in Records, approves it or returns it for correction with a
-   reason and guidance.
+1. A submitter opens the **Collect** app on their phone, picks one of their assigned forms, fills
+   it out (capturing real photos, signatures, and GPS as needed), and submits.
+2. A reviewer opens the submission in Records (or the submitter sees it in "My submissions"),
+   approves it or returns it for correction with a reason and guidance — a returned submission
+   reopens in Collect for the same submitter to fix and resubmit.
 3. If the underlying form is later republished, the reviewer and the original submitter are both
    notified, and the original submission keeps rendering against the version it was actually
    collected under.
@@ -212,6 +281,7 @@ if industrial), optionally set an endpoint → bind it to a stage or a form's lo
 | Charts | Recharts |
 | Database | PostgreSQL (Neon), Prisma ORM v6 |
 | Auth | Auth.js v5 (Credentials, JWT sessions), bcryptjs |
+| File storage | Vercel Blob (client-direct upload for photo/signature/document evidence) |
 | Deployment targets | Vercel, or Docker → Google Cloud Run + Cloud SQL |
 
 ## Project structure
@@ -221,13 +291,15 @@ src/
   app/
     (app)/            authenticated route group — Studio, Records, Connectors, Analytics, Admin
       layout.tsx       resolves the session + hydrates SessionProvider/StudioProvider server-side
+    collect/           mobile-first field-submitter app — assigned forms, fill/submit, my submissions
     api/               Route Handlers — every mutation re-checks authz independently of the client
     login/             Auth.js Credentials sign-in page
   components/
     layout/            AppShell, Sidebar, Topbar, NotificationBell
     studio/            Stage board, Form builder, Flow canvas + inspector + node catalog
-    records/           Submission detail/review UI
+    records/           Submission detail/review UI, CSV export
     connectors/         Connector creation
+    collect/           Collect shell + form client + capture/ (photo, signature, geo, doc-scan)
     ui/                Shared primitives (Button, Modal, StatusChip, EditableText, ...)
   lib/
     db.ts              Prisma client singleton
@@ -257,6 +329,9 @@ npm run db:seed              # inserts every seeded org/user/stage/form/flow/sub
 npm run dev
 ```
 
+Add `BLOB_READ_WRITE_TOKEN` (from your Vercel project's Storage tab) if you want to actually capture
+photos/signatures/documents in the Collect app — everything else runs without it.
+
 Every seeded user signs in with their real email and the shared demo password `demo1234` (override
 with `SEED_DEMO_PASSWORD`). The login page lists a few to try — logging in as different personas is
 the fastest way to see the RBAC view/edit boundaries for real. `npm run db:studio` opens Prisma
@@ -275,14 +350,25 @@ per-environment `AUTH_SECRET`.
 
 ## Prototype boundaries & roadmap
 
-Flagged explicitly rather than silently glossed over:
+Flagged explicitly rather than silently glossed over — this list reflects the actual code today,
+not a stale snapshot:
 
-- **No live submitter-facing "fill and submit" runtime yet.** The Form Builder's Preview panel can
-  create real, isolated test submissions, and Records reads real `Submission` rows, but there's no
-  public field-collection app yet — see the in-app **mobile strategy note** for the phased plan
-  (responsive/PWA form-fill runtime → offline queueing using the `SyncStatus` states already
-  modeled — `saved_offline` / `ready_to_sync` / `synced` / `sync_failed` — → field-specific polish
-  like GPS-boundary walking and biometric device lock).
-- **File uploads** (photo / document-scan / signature fields) aren't wired to real blob storage yet
-  — that depends on the submitter runtime above existing first.
-- **Analytics** reads curated seed data rather than live aggregation queries.
+- **No server-side validation that submitted answers match the form's actual field set.** The
+  Collect app enforces required fields client-side, but the collect API route accepts whatever
+  answers array it's given rather than cross-checking it against the published form's fields.
+- **`single_select` / `multi_select` fields render as free-text inputs**, in both Collect and the
+  Form Builder's Preview — the field *type* and its options are modeled and stored, but there's no
+  real dropdown/checkbox UI yet, which defeats controlled-vocabulary data quality for those fields.
+- **`repeat_group` has no Collect-side renderer.** It's offered as a field type in the Form Builder,
+  but a submitter has no way to fill in a repeating group of sub-fields yet.
+- **Document-scan uploads are inconsistent about PDFs.** The Collect file picker accepts
+  `application/pdf`, but the upload route's `allowedContentTypes` only lists image MIME types — a
+  submitter picking a real PDF will see the file dialog accept it and the upload then fail.
+- **Most API routes don't wrap their Prisma calls in try/catch** — a database hiccup surfaces as an
+  opaque 500 rather than a structured error response.
+- **The seed script's shared demo password (`demo1234`)** is fine for this seeded dataset but would
+  be a real weakness if `prisma/seed.ts` were ever run against a production database as-is.
+
+None of the above affect the things that matter most for field data integrity — tenant isolation,
+form-version pinning, review/correction history, and exclusive-link race safety are all real and
+verified (see [System architecture](#system-architecture)).
