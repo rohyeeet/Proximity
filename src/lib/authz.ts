@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { canEditStudio, canDeleteStage, canReview, canManageTeam } from "@/lib/permissions";
-import type { RoleTier } from "@/types";
+import { canActAsOps, canCreatePaymentAgreement, canDeleteStage, canEditStudio, canManageTeam, canReview, canSubmitClaim } from "@/lib/permissions";
+import type { PaymentPartyRole, RoleTier } from "@/types";
 
 type AccessResult = { ok: true; userId: string } | { ok: false; status: 401 | 403; message: string };
 
@@ -234,6 +234,86 @@ export async function requirePlatformAdmin(): Promise<AccessResult> {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user || user.status !== "active" || !user.isPlatformAdmin) {
     return { ok: false, status: 403, message: "Platform admin access required" };
+  }
+  return { ok: true, userId: user.id };
+}
+
+/** Setting up a payment agreement is platform-super-admin-only, per product decision — a project's
+ * own org staff take part in the flow (claims, recipients) but don't author the milestone schedule. */
+export async function requireCreatePaymentAgreementAccess(): Promise<AccessResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user || user.status !== "active" || !canCreatePaymentAgreement(user.isPlatformAdmin)) {
+    return { ok: false, status: 403, message: "Only a platform admin can create a payment agreement" };
+  }
+  return { ok: true, userId: user.id };
+}
+
+/** Ground-partner claim-filing access — the agreement's own project org staff, not investor/registry
+ * parties (see requirePaymentPartyAccess) and not platform-admin-only like requireCreatePaymentAgreementAccess.
+ * Takes the already-resolved organizationId (the caller fetches the agreement and 404s on its own
+ * if it doesn't exist, same convention as requireReviewAccess(domainPackId) elsewhere). */
+export async function requirePaymentOrgAccess(organizationId: string): Promise<AccessResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user || user.status !== "active") {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+  if (user.isPlatformAdmin) {
+    return { ok: true, userId: user.id };
+  }
+  const membership = await prisma.orgMembership.findFirst({
+    where: { userId: user.id, organizationId, status: "active" },
+    include: { role: true },
+  });
+  if (!membership || !canSubmitClaim(membership.role.tier as RoleTier)) {
+    return { ok: false, status: 403, message: "You don't have claim access on this agreement's organization" };
+  }
+  return { ok: true, userId: user.id };
+}
+
+/** Investor/registry access is resource-scoped via PaymentAgreementParty, deliberately independent
+ * of OrgMembership — these personas need visibility into a specific agreement, not "membership" in
+ * whatever org happens to own it. Pass `role` to require a specific party role (e.g. only a
+ * registry party can confirm a monitoring-cycle milestone). */
+export async function requirePaymentPartyAccess(paymentAgreementId: string, role?: PaymentPartyRole): Promise<AccessResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user || user.status !== "active") {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+  if (user.isPlatformAdmin) {
+    return { ok: true, userId: user.id };
+  }
+  const party = await prisma.paymentAgreementParty.findFirst({
+    where: { paymentAgreementId, userId: user.id, ...(role ? { role } : {}) },
+  });
+  if (!party) {
+    return { ok: false, status: 403, message: role ? `Only a ${role} party can do this` : "You're not a party to this agreement" };
+  }
+  return { ok: true, userId: user.id };
+}
+
+/** Recording the platform_ops consent, resolving gate overrides, and releasing payouts — reuses
+ * canActAsOps rather than requirePlatformAdmin directly so the capability stays documented in
+ * permissions.ts alongside every other named capability. */
+export async function requirePaymentOpsAccess(): Promise<AccessResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user || user.status !== "active" || !canActAsOps(user.isPlatformAdmin)) {
+    return { ok: false, status: 403, message: "Only platform ops can do this" };
   }
   return { ok: true, userId: user.id };
 }

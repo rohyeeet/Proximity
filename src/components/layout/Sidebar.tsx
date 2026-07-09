@@ -16,6 +16,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LogOut,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/session";
@@ -25,6 +26,7 @@ const orgNav = [
   { href: "/forms", label: "Forms", icon: FileText },
   { href: "/flows", label: "Flows", icon: Workflow },
   { href: "/records", label: "Records", icon: Table2 },
+  { href: "/payments", label: "Payments", icon: Wallet },
   { href: "/connectors", label: "Connectors", icon: Cable },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/team", label: "Team & Access", icon: Users },

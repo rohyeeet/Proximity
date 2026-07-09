@@ -9,11 +9,23 @@ import {
   toConnector,
   toDevice,
   toDomainPack,
+  toEscrowAccount,
+  toEvidenceAttachment,
   toFlowTemplate,
   toFormTemplate,
+  toGateOverride,
+  toMilestone,
+  toMilestoneClaim,
   toOrganization,
+  toPaymentAgreement,
+  toPaymentAgreementParty,
+  toPaymentAuditLogEntry,
+  toPayoutInstruction,
+  toPayoutRecipient,
   toRole,
+  toSplitRule,
   toStage,
+  toStakeholderConsent,
   toSubmission,
   toTelemetryStream,
   toUser,
@@ -23,13 +35,28 @@ import type {
   Connector,
   DomainPack,
   Device,
+  EscrowAccount,
+  EvidenceAttachment,
   FlowTemplate,
   FormFieldDefinition,
   FormTemplate,
+  FormTemplateVersion,
+  GateOverride,
   LinkFilter,
+  Milestone,
+  MilestoneClaim,
   Organization,
+  PaymentAgreement,
+  PaymentAgreementParty,
+  PaymentAuditLogEntry,
+  PaymentPartyRole,
+  PayoutInstruction,
+  PayoutRecipient,
   Role,
+  RoleTier,
+  SplitRule,
   Stage,
+  StakeholderConsent,
   Submission,
   SubmissionAnswer,
   TelemetryStream,
@@ -118,6 +145,13 @@ export async function getOrganization(id: string): Promise<Organization | undefi
   return row ? toOrganization(row) : undefined;
 }
 
+export async function getOrganizationsByIds(ids: string[]): Promise<Record<string, Organization>> {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) return {};
+  const rows = await prisma.organization.findMany({ where: { id: { in: uniqueIds } } });
+  return Object.fromEntries(rows.map((row) => [row.id, toOrganization(row)]));
+}
+
 export async function getStagesByDomainPack(domainPackId: string): Promise<Stage[]> {
   const rows = await prisma.stage.findMany({ where: { domainPackId }, orderBy: { sortOrder: "asc" } });
   return rows.map(toStage);
@@ -159,6 +193,18 @@ export async function getFormTemplateVersionFields(formTemplateId: string, versi
  * what's been published, never an in-progress draft. */
 export async function getLatestPublishedVersion(formTemplateId: string) {
   return prisma.formTemplateVersion.findFirst({ where: { formTemplateId, status: "published" }, orderBy: { versionNo: "desc" } });
+}
+
+/** Every version a form has ever had — used to build the full column set for the validation table
+ * (fields removed since, fields added since) rather than just the current version's fields. */
+export async function getFormTemplateVersions(formTemplateId: string): Promise<FormTemplateVersion[]> {
+  const rows = await prisma.formTemplateVersion.findMany({ where: { formTemplateId }, orderBy: { versionNo: "asc" } });
+  return rows.map((row) => ({
+    versionNo: row.versionNo,
+    status: row.status as "draft" | "published",
+    publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+    fields: row.fields as unknown as FormFieldDefinition[],
+  }));
 }
 
 export async function getFormTemplatesByDomainPack(domainPackId: string): Promise<FormTemplate[]> {
@@ -355,4 +401,161 @@ export async function getDevice(id: string): Promise<Device | undefined> {
 export async function getTelemetryStreamsByDevice(deviceId: string): Promise<TelemetryStream[]> {
   const rows = await prisma.telemetryStream.findMany({ where: { deviceId } });
   return rows.map(toTelemetryStream);
+}
+
+// ---------- Payments ----------
+
+export async function getUsersByIds(ids: string[]): Promise<Record<string, { fullName: string; avatarInitials: string }>> {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) return {};
+  const rows = await prisma.user.findMany({ where: { id: { in: uniqueIds } }, select: { id: true, fullName: true, avatarInitials: true } });
+  return Object.fromEntries(rows.map((r) => [r.id, { fullName: r.fullName, avatarInitials: r.avatarInitials }]));
+}
+
+/** Every agreement a user can see: all of them for a platform admin, otherwise the union of "my
+ * org owns it" (ground-partner staff) and "I'm a party to it" (investor/registry) — never one
+ * combined query, since those are two genuinely different access paths (see requirePaymentOrgAccess
+ * vs requirePaymentPartyAccess in authz.ts). */
+export async function getPaymentAgreementsForUser(userId: string, isPlatformAdmin: boolean): Promise<PaymentAgreement[]> {
+  if (isPlatformAdmin) {
+    const rows = await prisma.paymentAgreement.findMany({ orderBy: { createdAt: "desc" } });
+    return rows.map(toPaymentAgreement);
+  }
+  const [memberships, parties] = await Promise.all([
+    prisma.orgMembership.findMany({ where: { userId, status: "active" }, select: { organizationId: true } }),
+    prisma.paymentAgreementParty.findMany({ where: { userId }, select: { paymentAgreementId: true } }),
+  ]);
+  const orgIds = memberships.map((m) => m.organizationId);
+  const partyAgreementIds = parties.map((p) => p.paymentAgreementId);
+  if (orgIds.length === 0 && partyAgreementIds.length === 0) return [];
+  const rows = await prisma.paymentAgreement.findMany({
+    where: { OR: [{ organizationId: { in: orgIds } }, { id: { in: partyAgreementIds } }] },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(toPaymentAgreement);
+}
+
+export async function getPaymentAgreement(id: string): Promise<PaymentAgreement | undefined> {
+  const row = await prisma.paymentAgreement.findUnique({ where: { id } });
+  return row ? toPaymentAgreement(row) : undefined;
+}
+
+/** The current user's own party rows across every agreement — powers the "your investments" /
+ * "your registry queue" summary above the agreement list. */
+export async function getPaymentPartiesForUser(userId: string): Promise<PaymentAgreementParty[]> {
+  const rows = await prisma.paymentAgreementParty.findMany({ where: { userId } });
+  return rows.map(toPaymentAgreementParty);
+}
+
+export interface PaymentAccess {
+  canView: boolean;
+  isOrgMember: boolean;
+  orgTier?: RoleTier;
+  partyRoles: PaymentPartyRole[];
+}
+
+/** Resolves everything the agreement detail page needs to know about what one viewer can see/do:
+ * platform admin (everything), org-staff membership in the agreement's own org (ground-partner
+ * claim filing), and/or PaymentAgreementParty rows (investor/registry). Three genuinely different
+ * access paths, deliberately not collapsed into one query (see decision #1 in the payments plan). */
+export async function getPaymentAccessForUser(
+  userId: string,
+  isPlatformAdmin: boolean,
+  organizationId: string,
+  paymentAgreementId: string
+): Promise<PaymentAccess> {
+  if (isPlatformAdmin) return { canView: true, isOrgMember: true, orgTier: "platform", partyRoles: [] };
+  const [membership, parties] = await Promise.all([
+    prisma.orgMembership.findFirst({ where: { userId, organizationId, status: "active" }, include: { role: true } }),
+    prisma.paymentAgreementParty.findMany({ where: { userId, paymentAgreementId } }),
+  ]);
+  const partyRoles = parties.map((p) => p.role as PaymentPartyRole);
+  return {
+    canView: !!membership || partyRoles.length > 0,
+    isOrgMember: !!membership,
+    orgTier: membership ? (membership.role.tier as RoleTier) : undefined,
+    partyRoles,
+  };
+}
+
+export interface PaymentMilestoneDetail extends Milestone {
+  claims: (MilestoneClaim & { evidence: EvidenceAttachment[]; consents: StakeholderConsent[] })[];
+  payoutInstructions: (PayoutInstruction & { recipient?: PayoutRecipient; overrides: GateOverride[] })[];
+}
+
+export interface PaymentAgreementDetail {
+  agreement: PaymentAgreement;
+  organizationName: string;
+  splitRules: SplitRule[];
+  milestones: PaymentMilestoneDetail[];
+  parties: PaymentAgreementParty[];
+  recipients: PayoutRecipient[];
+  escrow?: EscrowAccount;
+  auditEntries: PaymentAuditLogEntry[];
+  usersById: Record<string, { fullName: string; avatarInitials: string }>;
+}
+
+/** The one aggregate fetch backing the agreement detail screen — a single nested query rather than
+ * N+1 round trips, since every piece (milestones, claims, evidence, consents, payouts, escrow,
+ * audit trail) is needed together to render the page. */
+export async function getPaymentAgreementDetail(id: string): Promise<PaymentAgreementDetail | undefined> {
+  const row = await prisma.paymentAgreement.findUnique({
+    where: { id },
+    include: {
+      organization: { select: { name: true } },
+      splitRules: true,
+      milestones: {
+        orderBy: { order: "asc" },
+        include: {
+          claims: { orderBy: { submittedAt: "desc" }, include: { evidence: true, consents: true } },
+          payoutInstructions: { include: { recipient: true, overrides: { orderBy: { createdAt: "desc" } } } },
+        },
+      },
+      parties: true,
+      recipients: true,
+      escrow: true,
+      auditEntries: { orderBy: { timestamp: "asc" } },
+    },
+  });
+  if (!row) return undefined;
+
+  const userIds = new Set<string>([row.createdByUserId]);
+  for (const party of row.parties) userIds.add(party.userId);
+  for (const milestone of row.milestones) {
+    for (const claim of milestone.claims) {
+      userIds.add(claim.submittedByUserId);
+      for (const consent of claim.consents) if (consent.consentedByUserId) userIds.add(consent.consentedByUserId);
+    }
+    for (const instruction of milestone.payoutInstructions) {
+      for (const override of instruction.overrides) {
+        if (override.partnerApprovalByUserId) userIds.add(override.partnerApprovalByUserId);
+        if (override.investorApprovalByUserId) userIds.add(override.investorApprovalByUserId);
+      }
+    }
+  }
+  const usersById = await getUsersByIds([...userIds]);
+
+  return {
+    agreement: toPaymentAgreement(row),
+    organizationName: row.organization.name,
+    splitRules: row.splitRules.map(toSplitRule),
+    milestones: row.milestones.map((m) => ({
+      ...toMilestone(m),
+      claims: m.claims.map((c) => ({
+        ...toMilestoneClaim(c),
+        evidence: c.evidence.map(toEvidenceAttachment),
+        consents: c.consents.map(toStakeholderConsent),
+      })),
+      payoutInstructions: m.payoutInstructions.map((pi) => ({
+        ...toPayoutInstruction(pi),
+        recipient: pi.recipient ? toPayoutRecipient(pi.recipient) : undefined,
+        overrides: pi.overrides.map(toGateOverride),
+      })),
+    })),
+    parties: row.parties.map(toPaymentAgreementParty),
+    recipients: row.recipients.map(toPayoutRecipient),
+    escrow: row.escrow ? toEscrowAccount(row.escrow) : undefined,
+    auditEntries: row.auditEntries.map(toPaymentAuditLogEntry),
+    usersById,
+  };
 }

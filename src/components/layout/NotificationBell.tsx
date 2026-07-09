@@ -86,8 +86,9 @@ export function NotificationBell() {
                   <p className="text-[11px] text-ink-soft/70">{formatRelativeTime(notification.createdAt)}</p>
                 </div>
               );
-              return notification.formTemplateId ? (
-                <Link key={notification.id} href={`/forms/${notification.formTemplateId}`} onClick={() => markRead(notification)}>
+              const href = notification.linkUrl ?? (notification.formTemplateId ? `/forms/${notification.formTemplateId}` : undefined);
+              return href ? (
+                <Link key={notification.id} href={href} onClick={() => markRead(notification)}>
                   {content}
                 </Link>
               ) : (

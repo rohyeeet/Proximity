@@ -118,7 +118,7 @@ export default function OverviewPage() {
             {[...needsFix, ...needsCheck].slice(0, 6).map((submission) => (
               <Link
                 key={submission.id}
-                href={`/records/${submission.formTemplateId}/${submission.id}`}
+                href={`/records/${submission.formTemplateId}?highlight=${submission.id}`}
                 className="flex items-center justify-between px-5 py-3 text-[13px] hover:bg-sunken"
               >
                 <div>

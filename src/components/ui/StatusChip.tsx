@@ -62,3 +62,53 @@ export function ConnectorStatusChip({ status }: { status: string }) {
   const meta = connectorStatusMeta[status] ?? { label: status, tone: "hold" as ChipTone };
   return <StatusChip label={meta.label} tone={meta.tone} />;
 }
+
+const paymentAgreementStatusMeta: Record<string, { label: string; tone: ChipTone }> = {
+  draft: { label: "Draft", tone: "hold" },
+  active: { label: "Active", tone: "good" },
+  completed: { label: "Completed", tone: "accent" },
+};
+
+export function PaymentAgreementStatusChip({ status }: { status: string }) {
+  const meta = paymentAgreementStatusMeta[status] ?? { label: status, tone: "hold" as ChipTone };
+  return <StatusChip label={meta.label} tone={meta.tone} />;
+}
+
+const milestoneStatusMeta: Record<string, { label: string; tone: ChipTone }> = {
+  not_due: { label: "Not due", tone: "hold" },
+  claim_submitted: { label: "Claim submitted", tone: "accent" },
+  consented: { label: "Consented", tone: "accent" },
+  paid: { label: "Paid", tone: "good" },
+};
+
+export function MilestoneStatusChip({ status }: { status: string }) {
+  const meta = milestoneStatusMeta[status] ?? { label: status, tone: "hold" as ChipTone };
+  return <StatusChip label={meta.label} tone={meta.tone} />;
+}
+
+const payoutInstructionStatusMeta: Record<string, { label: string; tone: ChipTone }> = {
+  blocked_awaiting_verification: { label: "Awaiting verification", tone: "hold" },
+  blocked_awaiting_kyc: { label: "Blocked — KYC", tone: "critical" },
+  blocked_awaiting_bav: { label: "Blocked — BAV", tone: "critical" },
+  ready: { label: "Ready", tone: "accent" },
+  routed: { label: "Processing…", tone: "warn" },
+  paid: { label: "Paid", tone: "good" },
+};
+
+export function PayoutInstructionStatusChip({ status }: { status: string }) {
+  const meta = payoutInstructionStatusMeta[status] ?? { label: status, tone: "hold" as ChipTone };
+  return <StatusChip label={meta.label} tone={meta.tone} />;
+}
+
+const verificationStatusMeta: Record<string, { label: string; tone: ChipTone }> = {
+  not_started: { label: "Not started", tone: "hold" },
+  in_review: { label: "In review", tone: "warn" },
+  approved: { label: "Approved", tone: "good" },
+  rejected: { label: "Rejected", tone: "critical" },
+  re_verification_required: { label: "Re-verification needed", tone: "critical" },
+};
+
+export function VerificationStatusChip({ status }: { status: string }) {
+  const meta = verificationStatusMeta[status] ?? { label: status, tone: "hold" as ChipTone };
+  return <StatusChip label={meta.label} tone={meta.tone} />;
+}

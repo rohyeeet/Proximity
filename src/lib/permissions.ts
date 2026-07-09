@@ -25,3 +25,24 @@ export function canReview(tier: RoleTier): boolean {
 export function canManageTeam(tier: RoleTier): boolean {
   return tier === "platform" || tier === "org_admin" || tier === "org_sub_admin";
 }
+
+/** Setting up a payment agreement + milestone schedule is a platform-super-admin-only capability
+ * — a project's own org staff take part in it (submit claims, appear as recipients) but don't
+ * author it themselves. Platform tier is a boolean flag on User, not an OrgMembership role (see
+ * schema comment on User.isPlatformAdmin), so this checks the flag directly rather than a tier string. */
+export function canCreatePaymentAgreement(isPlatformAdmin: boolean): boolean {
+  return isPlatformAdmin;
+}
+
+/** Filing a milestone claim is the "ground partner" action — any org staff tier that actually does
+ * field/ops work, not a pure reviewer or read-only viewer. */
+export function canSubmitClaim(tier: RoleTier): boolean {
+  return tier === "platform" || tier === "org_admin" || tier === "org_sub_admin" || tier === "designer" || tier === "submitter";
+}
+
+/** Platform ops: records the platform_ops consent, resolves gate overrides, releases payouts.
+ * Kept as its own named function (rather than an inline isPlatformAdmin check) so the capability
+ * is documented in one place, same as every other permission here. */
+export function canActAsOps(isPlatformAdmin: boolean): boolean {
+  return isPlatformAdmin;
+}

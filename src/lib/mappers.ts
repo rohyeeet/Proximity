@@ -17,6 +17,18 @@ import type {
   Device as DeviceRow,
   TelemetryStream as TelemetryStreamRow,
   Notification as NotificationRow,
+  PaymentAgreement as PaymentAgreementRow,
+  SplitRule as SplitRuleRow,
+  Milestone as MilestoneRow,
+  MilestoneClaim as MilestoneClaimRow,
+  EvidenceAttachment as EvidenceAttachmentRow,
+  StakeholderConsent as StakeholderConsentRow,
+  PaymentAgreementParty as PaymentAgreementPartyRow,
+  PayoutRecipient as PayoutRecipientRow,
+  PayoutInstruction as PayoutInstructionRow,
+  EscrowAccount as EscrowAccountRow,
+  GateOverride as GateOverrideRow,
+  PaymentAuditLogEntry as PaymentAuditLogEntryRow,
 } from "@prisma/client";
 import type {
   Organization,
@@ -43,6 +55,18 @@ import type {
   ChainOfCustodyMode,
   Notification,
   NotificationType,
+  PaymentAgreement,
+  SplitRule,
+  Milestone,
+  MilestoneClaim,
+  EvidenceAttachment,
+  StakeholderConsent,
+  PaymentAgreementParty,
+  PayoutRecipient,
+  PayoutInstruction,
+  EscrowAccount,
+  GateOverride,
+  PaymentAuditLogEntry,
 } from "@/types";
 
 export function toDomainPack(row: DomainPackRow): DomainPack {
@@ -205,8 +229,160 @@ export function toNotification(row: NotificationRow): Notification {
     title: row.title,
     body: row.body,
     formTemplateId: row.formTemplateId ?? undefined,
+    linkUrl: row.linkUrl ?? undefined,
     createdAt: row.createdAt.toISOString(),
     readAt: row.readAt ? row.readAt.toISOString() : undefined,
+  };
+}
+
+export function toPaymentAgreement(row: PaymentAgreementRow): PaymentAgreement {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    buyerName: row.buyerName,
+    projectName: row.projectName,
+    currency: row.currency,
+    totalValue: row.totalValue,
+    pricePerCredit: row.pricePerCredit ?? undefined,
+    escrowInterestAllocation: row.escrowInterestAllocation as PaymentAgreement["escrowInterestAllocation"],
+    fxRateTimingPolicy: row.fxRateTimingPolicy as PaymentAgreement["fxRateTimingPolicy"],
+    status: row.status as PaymentAgreement["status"],
+    createdByUserId: row.createdByUserId,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toSplitRule(row: SplitRuleRow): SplitRule {
+  return {
+    id: row.id,
+    paymentAgreementId: row.paymentAgreementId,
+    participantRole: row.participantRole as SplitRule["participantRole"],
+    percent: row.percent,
+  };
+}
+
+export function toMilestone(row: MilestoneRow): Milestone {
+  return {
+    id: row.id,
+    paymentAgreementId: row.paymentAgreementId,
+    type: row.type as Milestone["type"],
+    label: row.label,
+    percentOfTotal: row.percentOfTotal,
+    verificationSource: row.verificationSource as Milestone["verificationSource"],
+    registryRef: row.registryRef ?? undefined,
+    order: row.order,
+    status: row.status as Milestone["status"],
+  };
+}
+
+export function toMilestoneClaim(row: MilestoneClaimRow): MilestoneClaim {
+  return {
+    id: row.id,
+    milestoneId: row.milestoneId,
+    submittedByUserId: row.submittedByUserId,
+    submittedAt: row.submittedAt.toISOString(),
+    claimedAmount: row.claimedAmount,
+    status: row.status as MilestoneClaim["status"],
+  };
+}
+
+export function toEvidenceAttachment(row: EvidenceAttachmentRow): EvidenceAttachment {
+  return {
+    id: row.id,
+    claimId: row.claimId,
+    sourceType: row.sourceType as EvidenceAttachment["sourceType"],
+    fileRef: row.fileRef,
+    fileName: row.fileName,
+    hash: row.hash,
+    submittedAt: row.submittedAt.toISOString(),
+  };
+}
+
+export function toStakeholderConsent(row: StakeholderConsentRow): StakeholderConsent {
+  return {
+    id: row.id,
+    claimId: row.claimId,
+    requiredRole: row.requiredRole as StakeholderConsent["requiredRole"],
+    consentedByUserId: row.consentedByUserId ?? undefined,
+    consentedAt: row.consentedAt ? row.consentedAt.toISOString() : undefined,
+    status: row.status as StakeholderConsent["status"],
+    rejectionReason: row.rejectionReason ?? undefined,
+  };
+}
+
+export function toPaymentAgreementParty(row: PaymentAgreementPartyRow): PaymentAgreementParty {
+  return {
+    id: row.id,
+    paymentAgreementId: row.paymentAgreementId,
+    userId: row.userId,
+    role: row.role as PaymentAgreementParty["role"],
+    investedAmount: row.investedAmount ?? undefined,
+  };
+}
+
+export function toPayoutRecipient(row: PayoutRecipientRow): PayoutRecipient {
+  return {
+    id: row.id,
+    paymentAgreementId: row.paymentAgreementId,
+    role: row.role as PayoutRecipient["role"],
+    name: row.name,
+    kycStatus: row.kycStatus as PayoutRecipient["kycStatus"],
+    bavStatus: row.bavStatus as PayoutRecipient["bavStatus"],
+    kycVerifiedAt: row.kycVerifiedAt ? row.kycVerifiedAt.toISOString() : undefined,
+    bavVerifiedAt: row.bavVerifiedAt ? row.bavVerifiedAt.toISOString() : undefined,
+  };
+}
+
+export function toPayoutInstruction(row: PayoutInstructionRow): PayoutInstruction {
+  return {
+    id: row.id,
+    milestoneId: row.milestoneId,
+    claimId: row.claimId,
+    recipientId: row.recipientId ?? undefined,
+    participantRole: row.participantRole as PayoutInstruction["participantRole"],
+    amount: row.amount,
+    currency: row.currency,
+    status: row.status as PayoutInstruction["status"],
+    proximityPayRef: row.proximityPayRef ?? undefined,
+    paidAt: row.paidAt ? row.paidAt.toISOString() : undefined,
+  };
+}
+
+export function toEscrowAccount(row: EscrowAccountRow): EscrowAccount {
+  return {
+    id: row.id,
+    paymentAgreementId: row.paymentAgreementId,
+    heldAmount: row.heldAmount,
+    currency: row.currency,
+    corePortionBalance: row.corePortionBalance,
+    interestAccruedToDate: row.interestAccruedToDate,
+    status: row.status as EscrowAccount["status"],
+    fundedAt: row.fundedAt.toISOString(),
+  };
+}
+
+export function toGateOverride(row: GateOverrideRow): GateOverride {
+  return {
+    id: row.id,
+    payoutInstructionId: row.payoutInstructionId,
+    overriddenGate: row.overriddenGate as GateOverride["overriddenGate"],
+    partnerApprovalByUserId: row.partnerApprovalByUserId ?? undefined,
+    investorApprovalByUserId: row.investorApprovalByUserId ?? undefined,
+    justification: row.justification,
+    status: row.status as GateOverride["status"],
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toPaymentAuditLogEntry(row: PaymentAuditLogEntryRow): PaymentAuditLogEntry {
+  return {
+    id: row.id,
+    paymentAgreementId: row.paymentAgreementId,
+    eventType: row.eventType,
+    payload: row.payload,
+    timestamp: row.timestamp.toISOString(),
+    previousHash: row.previousHash,
+    hash: row.hash,
   };
 }
 

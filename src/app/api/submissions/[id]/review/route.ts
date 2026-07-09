@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireReviewAccess } from "@/lib/authz";
 import { toSubmission } from "@/lib/mappers";
 import { genId } from "@/lib/utils";
-import type { ReviewActionRecord, ReviewOutcome } from "@/types";
+import type { FieldFlag, ReviewActionRecord, ReviewOutcome } from "@/types";
 
 const REVIEW_STATUS_BY_OUTCOME: Record<ReviewOutcome, string> = {
   approved: "approved",
@@ -11,8 +11,8 @@ const REVIEW_STATUS_BY_OUTCOME: Record<ReviewOutcome, string> = {
   escalated: "on_hold",
 };
 
-/** Persists a reviewer's approve/return decision — previously this only ever updated local React
- * state in RecordDetailClient and was lost on reload, so a submitter never actually saw it. */
+/** Persists a reviewer's approve/return decision, made from the row-wise validation table
+ * (`RecordsGridClient`) — optionally with per-field flags/remarks when returning for correction. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const existing = await prisma.submission.findUnique({ where: { id }, include: { formTemplate: true } });
@@ -27,12 +27,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid outcome" }, { status: 400 });
   }
 
+  const fieldFlags: FieldFlag[] | undefined = Array.isArray(body.fieldFlags)
+    ? body.fieldFlags.filter(
+        (f: unknown): f is FieldFlag =>
+          !!f &&
+          typeof (f as FieldFlag).fieldCode === "string" &&
+          (f as FieldFlag).fieldCode.trim() !== "" &&
+          typeof (f as FieldFlag).remark === "string" &&
+          (f as FieldFlag).remark.trim() !== ""
+      )
+    : undefined;
+
   const priorActions = existing.reviewActions as unknown as ReviewActionRecord[];
   const action: ReviewActionRecord = {
     id: genId("review"),
     outcome,
     reason: typeof body.reason === "string" ? body.reason : undefined,
     guidance: typeof body.guidance === "string" ? body.guidance : undefined,
+    fieldFlags: fieldFlags && fieldFlags.length > 0 ? fieldFlags : undefined,
     reviewerUserId: access.userId,
     createdAt: new Date().toISOString(),
   };

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { ClipboardList, History, LogOut } from "lucide-react";
+import { ClipboardList, History, LogOut, Wallet } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/collect", label: "Forms", icon: ClipboardList },
   { href: "/collect/submissions", label: "My submissions", icon: History },
+  { href: "/collect/payments", label: "Payments", icon: Wallet },
 ];
 
 /**

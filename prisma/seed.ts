@@ -18,7 +18,20 @@ import {
   connectors,
   devices,
   telemetryStreams,
+  paymentAgreements,
+  splitRules,
+  milestones,
+  payoutRecipients,
+  milestoneClaims,
+  evidenceAttachments,
+  stakeholderConsents,
+  paymentAgreementParties,
+  payoutInstructions,
+  escrowAccounts,
+  paymentAuditSeedEvents,
 } from "../src/data";
+import { computeHash, GENESIS_HASH } from "../src/lib/payment-audit";
+import { genId } from "../src/lib/utils";
 
 const prisma = new PrismaClient();
 
@@ -303,6 +316,196 @@ async function main() {
     });
   }
   console.log(`✓ ${submissions.length} submissions`);
+
+  for (const agreement of paymentAgreements) {
+    await prisma.paymentAgreement.upsert({
+      where: { id: agreement.id },
+      create: {
+        id: agreement.id,
+        organizationId: agreement.organizationId,
+        buyerName: agreement.buyerName,
+        projectName: agreement.projectName,
+        currency: agreement.currency,
+        totalValue: agreement.totalValue,
+        pricePerCredit: agreement.pricePerCredit,
+        escrowInterestAllocation: agreement.escrowInterestAllocation,
+        fxRateTimingPolicy: agreement.fxRateTimingPolicy,
+        status: agreement.status,
+        createdByUserId: agreement.createdByUserId,
+        createdAt: new Date(agreement.createdAt),
+      },
+      update: { status: agreement.status },
+    });
+  }
+  for (const rule of splitRules) {
+    await prisma.splitRule.upsert({
+      where: { id: rule.id },
+      create: { id: rule.id, paymentAgreementId: rule.paymentAgreementId, participantRole: rule.participantRole, percent: rule.percent },
+      update: { percent: rule.percent },
+    });
+  }
+  for (const milestone of milestones) {
+    await prisma.milestone.upsert({
+      where: { id: milestone.id },
+      create: {
+        id: milestone.id,
+        paymentAgreementId: milestone.paymentAgreementId,
+        type: milestone.type,
+        label: milestone.label,
+        percentOfTotal: milestone.percentOfTotal,
+        verificationSource: milestone.verificationSource,
+        registryRef: milestone.registryRef,
+        order: milestone.order,
+        status: milestone.status,
+      },
+      update: { status: milestone.status },
+    });
+  }
+  for (const recipient of payoutRecipients) {
+    await prisma.payoutRecipient.upsert({
+      where: { id: recipient.id },
+      create: {
+        id: recipient.id,
+        paymentAgreementId: recipient.paymentAgreementId,
+        role: recipient.role,
+        name: recipient.name,
+        kycStatus: recipient.kycStatus,
+        bavStatus: recipient.bavStatus,
+        kycVerifiedAt: recipient.kycVerifiedAt ? new Date(recipient.kycVerifiedAt) : undefined,
+        bavVerifiedAt: recipient.bavVerifiedAt ? new Date(recipient.bavVerifiedAt) : undefined,
+      },
+      update: { kycStatus: recipient.kycStatus, bavStatus: recipient.bavStatus },
+    });
+  }
+  for (const claim of milestoneClaims) {
+    await prisma.milestoneClaim.upsert({
+      where: { id: claim.id },
+      create: {
+        id: claim.id,
+        milestoneId: claim.milestoneId,
+        submittedByUserId: claim.submittedByUserId,
+        submittedAt: new Date(claim.submittedAt),
+        claimedAmount: claim.claimedAmount,
+        status: claim.status,
+      },
+      update: { status: claim.status },
+    });
+  }
+  for (const evidence of evidenceAttachments) {
+    await prisma.evidenceAttachment.upsert({
+      where: { id: evidence.id },
+      create: {
+        id: evidence.id,
+        claimId: evidence.claimId,
+        sourceType: evidence.sourceType,
+        fileRef: evidence.fileRef,
+        fileName: evidence.fileName,
+        hash: evidence.hash,
+        submittedAt: new Date(evidence.submittedAt),
+      },
+      update: {},
+    });
+  }
+  for (const consent of stakeholderConsents) {
+    await prisma.stakeholderConsent.upsert({
+      where: { id: consent.id },
+      create: {
+        id: consent.id,
+        claimId: consent.claimId,
+        requiredRole: consent.requiredRole,
+        consentedByUserId: consent.consentedByUserId,
+        consentedAt: consent.consentedAt ? new Date(consent.consentedAt) : undefined,
+        status: consent.status,
+        rejectionReason: consent.rejectionReason,
+      },
+      // Reset every field the live consent-recording API can mutate, not just status — otherwise
+      // re-running the seed after exercising the live app leaves a stale consentedByUserId/
+      // consentedAt sitting next to a reset-to-pending status, which is exactly the kind of
+      // inconsistent state this "safe to re-run" script should never produce.
+      update: {
+        status: consent.status,
+        consentedByUserId: consent.consentedByUserId ?? null,
+        consentedAt: consent.consentedAt ? new Date(consent.consentedAt) : null,
+        rejectionReason: consent.rejectionReason ?? null,
+      },
+    });
+  }
+  for (const party of paymentAgreementParties) {
+    await prisma.paymentAgreementParty.upsert({
+      where: { id: party.id },
+      create: { id: party.id, paymentAgreementId: party.paymentAgreementId, userId: party.userId, role: party.role, investedAmount: party.investedAmount },
+      update: {},
+    });
+  }
+  for (const instruction of payoutInstructions) {
+    await prisma.payoutInstruction.upsert({
+      where: { id: instruction.id },
+      create: {
+        id: instruction.id,
+        milestoneId: instruction.milestoneId,
+        claimId: instruction.claimId,
+        recipientId: instruction.recipientId,
+        participantRole: instruction.participantRole,
+        amount: instruction.amount,
+        currency: instruction.currency,
+        status: instruction.status,
+        proximityPayRef: instruction.proximityPayRef,
+        paidAt: instruction.paidAt ? new Date(instruction.paidAt) : undefined,
+      },
+      // Same reasoning as the StakeholderConsent upsert above — the live release/override APIs
+      // mutate proximityPayRef/paidAt too, not just status.
+      update: {
+        status: instruction.status,
+        proximityPayRef: instruction.proximityPayRef ?? null,
+        paidAt: instruction.paidAt ? new Date(instruction.paidAt) : null,
+      },
+    });
+  }
+  for (const escrow of escrowAccounts) {
+    await prisma.escrowAccount.upsert({
+      where: { id: escrow.id },
+      create: {
+        id: escrow.id,
+        paymentAgreementId: escrow.paymentAgreementId,
+        heldAmount: escrow.heldAmount,
+        currency: escrow.currency,
+        corePortionBalance: escrow.corePortionBalance,
+        interestAccruedToDate: escrow.interestAccruedToDate,
+        status: escrow.status,
+        fundedAt: new Date(escrow.fundedAt),
+      },
+      update: { heldAmount: escrow.heldAmount, corePortionBalance: escrow.corePortionBalance, status: escrow.status },
+    });
+  }
+  // Built here (not as static literals) so the hash chain is genuinely valid — the "Verify chain"
+  // button should pass on seeded demo data exactly as it would on live-created entries. Chained
+  // per paymentAgreementId (each agreement's chain starts from its own GENESIS_HASH, matching
+  // appendAuditEntry's own per-agreement scoping) and skipped per-agreement if it already has
+  // entries, so re-running the seed script never duplicates the trail.
+  const eventsByAgreement = new Map<string, typeof paymentAuditSeedEvents>();
+  for (const event of paymentAuditSeedEvents) {
+    eventsByAgreement.set(event.paymentAgreementId, [...(eventsByAgreement.get(event.paymentAgreementId) ?? []), event]);
+  }
+  for (const [paymentAgreementId, events] of eventsByAgreement) {
+    const existingCount = await prisma.paymentAuditLogEntry.count({ where: { paymentAgreementId } });
+    if (existingCount > 0) continue;
+    let previousHash = GENESIS_HASH;
+    for (const event of events) {
+      // Hash the normalized (millisecond-precision) timestamp, not the literal seed string — a
+      // DateTime column always round-trips back through Date.toISOString() at read time (which
+      // appends ".000" if the literal didn't have it), and verifyAuditChain() recomputes the hash
+      // from that round-tripped value. Hashing anything else here would make "Verify chain" report
+      // a false break on every seeded entry.
+      const timestamp = new Date(event.timestamp);
+      const normalizedTimestamp = timestamp.toISOString();
+      const hash = computeHash(previousHash, event.eventType, event.payload, normalizedTimestamp);
+      await prisma.paymentAuditLogEntry.create({
+        data: { id: genId("audit"), paymentAgreementId, eventType: event.eventType, payload: event.payload as object, timestamp, previousHash, hash },
+      });
+      previousHash = hash;
+    }
+  }
+  console.log(`✓ ${paymentAgreements.length} payment agreement(s) (+ milestones, claims, consents, payouts, escrow, audit trail)`);
 
   console.log("\nSeed complete. Every mock user can log in with their email + the demo password above.");
 }

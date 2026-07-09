@@ -2,6 +2,36 @@ import type { Submission } from "@/types";
 
 export const submissions: Submission[] = [
   {
+    id: "sub-facility-01",
+    displayId: "FS-01",
+    formTemplateId: "form-bc-facility-setup",
+    formTemplateVersionNo: 4,
+    flowNodeLabel: "Facility Setup",
+    reviewStatus: "needs_check",
+    syncStatus: "synced",
+    submittedByUserId: "user-deepak",
+    currentVersionNo: 1,
+    updatedAt: "2026-06-15T09:00:00Z",
+    answers: [
+      { fieldCode: "facility_name", value: "Chikmagalur Pilot" },
+      { fieldCode: "facility_type", value: "Pyrolysis unit" },
+      {
+        fieldCode: "boundary",
+        value: JSON.stringify([
+          { lat: 13.3161, lng: 75.7729, accuracy: 4 },
+          { lat: 13.3167, lng: 75.7738, accuracy: 5 },
+          { lat: 13.3159, lng: 75.7745, accuracy: 4 },
+          { lat: 13.3153, lng: 75.7736, accuracy: 6 },
+        ]),
+      },
+      { fieldCode: "capacity", value: 12 },
+    ],
+    evidence: [],
+    versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-15T09:00:00Z", createdByUserId: "user-deepak" }],
+    reviewActions: [],
+    smartCheckSummary: "Boundary closed and non-overlapping · capacity within expected range",
+  },
+  {
     id: "sub-fs-114",
     displayId: "FD-114",
     formTemplateId: "form-bc-feedstock",
@@ -19,6 +49,7 @@ export const submissions: Submission[] = [
       { fieldCode: "quantity_kg", value: 2400 },
       { fieldCode: "source_geography", value: "Chikmagalur district, Karnataka" },
       { fieldCode: "counterfactual_fate", value: "Burned" },
+      { fieldCode: "source_photo", value: "ev-1" },
     ],
     evidence: [{ id: "ev-1", fileName: "source_photo_114.jpg", kind: "photo", smartCheckSummary: "Blur: passed" }],
     versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-28T09:12:00Z", createdByUserId: "user-deepak" }],
@@ -76,6 +107,7 @@ export const submissions: Submission[] = [
       { fieldCode: "quantity_kg", value: 3100 },
       { fieldCode: "source_geography", value: "Chikmagalur district, Karnataka" },
       { fieldCode: "counterfactual_fate", value: "Burned" },
+      { fieldCode: "source_photo", value: "ev-2" },
     ],
     evidence: [{ id: "ev-2", fileName: "source_photo_112.jpg", kind: "photo" }],
     versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-25T10:00:00Z", createdByUserId: "user-deepak" }],
@@ -100,6 +132,7 @@ export const submissions: Submission[] = [
       { fieldCode: "quantity_kg", value: 2000 },
       { fieldCode: "source_geography", value: "Chikmagalur district, Karnataka" },
       { fieldCode: "counterfactual_fate", value: "Burned" },
+      { fieldCode: "source_photo", value: "ev-3" },
     ],
     evidence: [{ id: "ev-3", fileName: "source_photo_111_v2.jpg", kind: "photo" }],
     versions: [
@@ -228,6 +261,7 @@ export const submissions: Submission[] = [
       { fieldCode: "generation_technology", value: "Onshore wind" },
       { fieldCode: "asset_capacity_mw", value: 48 },
       { fieldCode: "no_public_funding", value: true },
+      { fieldCode: "ppa_document", value: "ev-6" },
     ],
     evidence: [{ id: "ev-6", fileName: "ppa_novah2_wind_48mw.pdf", kind: "document_scan", smartCheckSummary: "OCR high confidence" }],
     versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-26T09:00:00Z", createdByUserId: "user-marcus" }],
@@ -727,6 +761,7 @@ export const submissions: Submission[] = [
     answers: [
       { fieldCode: "mode", value: "Truck" },
       { fieldCode: "distance_km", value: 64 },
+      { fieldCode: "bill_of_lading", value: "ev-7" },
     ],
     evidence: [{ id: "ev-7", fileName: "bol_st01_to_port.pdf", kind: "document_scan" }],
     versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-25T18:00:00Z", createdByUserId: "user-marcus" }],
@@ -748,6 +783,7 @@ export const submissions: Submission[] = [
     answers: [
       { fieldCode: "mode", value: "Truck" },
       { fieldCode: "distance_km", value: 58 },
+      { fieldCode: "bill_of_lading", value: "ev-8" },
     ],
     evidence: [{ id: "ev-8", fileName: "bol_st02_to_port.pdf", kind: "document_scan" }],
     versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-26T18:00:00Z", createdByUserId: "user-marcus" }],
@@ -766,7 +802,10 @@ export const submissions: Submission[] = [
     submittedByUserId: "user-marcus",
     currentVersionNo: 1,
     updatedAt: "2026-06-26T21:00:00Z",
-    answers: [{ fieldCode: "quantity_loaded_kg", value: 87 }],
+    answers: [
+      { fieldCode: "quantity_loaded_kg", value: 87 },
+      { fieldCode: "surveyor_report", value: "ev-9" },
+    ],
     evidence: [{ id: "ev-9", fileName: "surveyor_report_ct01.pdf", kind: "document_scan" }],
     versions: [{ versionNo: 1, answers: [], createdAt: "2026-06-26T21:00:00Z", createdByUserId: "user-marcus" }],
     reviewActions: [{ id: "ra-18", outcome: "approved", reviewerUserId: "user-marcus", createdAt: "2026-06-26T22:00:00Z" }],

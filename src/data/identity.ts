@@ -39,6 +39,11 @@ export const users: User[] = [
   { id: "user-elena", fullName: "Elena Fischer", email: "elena.fischer@novah2.com", avatarInitials: "EF", status: "active" },
   { id: "user-marcus", fullName: "Marcus Boateng", email: "marcus.boateng@novah2.com", avatarInitials: "MB", status: "active" },
   { id: "user-priya", fullName: "Priya Nair", email: "priya.nair@novah2.com", avatarInitials: "PN", status: "invited" },
+  // Payments demo personas — see [[project-payments-module]] memory. Cross-org/resource-scoped
+  // access for these two comes from PaymentAgreementParty (src/data/payments.ts), not their org
+  // tier below; the "viewer" membership just gets them logged in through the existing org-switcher.
+  { id: "user-meridian", fullName: "Alex Chen (Meridian Capital)", email: "alex.chen@meridiancapital.demo", avatarInitials: "AC", status: "active" },
+  { id: "user-puro", fullName: "N. Fernandes (Puro.earth)", email: "n.fernandes@puro.earth.demo", avatarInitials: "NF", status: "active" },
 ];
 
 export const roles: Role[] = [
@@ -93,6 +98,16 @@ export const roles: Role[] = [
     cannot: ["approve records", "edit forms"],
   },
   {
+    id: "role-payments-viewer-varaha",
+    organizationId: "org-varaha-south",
+    name: "Payments Party (Viewer)",
+    tier: "viewer",
+    description: "External investor/registry counterparties on Payments agreements — read-only everywhere else in the workspace; their actual payment capabilities come from PaymentAgreementParty, not this role.",
+    canView: ["payment agreements they're a party to"],
+    canAct: [],
+    cannot: ["edit forms/flows", "review records", "see billing", "manage team"],
+  },
+  {
     id: "role-org-admin-novah2",
     organizationId: "org-novah2",
     name: "Org Admin",
@@ -122,6 +137,8 @@ export const orgMemberships: OrgMembership[] = [
   { id: "mem-5", organizationId: "org-novah2", userId: "user-elena", roleId: "role-org-admin-novah2", status: "active" },
   { id: "mem-6", organizationId: "org-novah2", userId: "user-marcus", roleId: "role-plant-qa-novah2", status: "active" },
   { id: "mem-7", organizationId: "org-novah2", userId: "user-priya", roleId: "role-plant-qa-novah2", status: "invited" },
+  { id: "mem-8", organizationId: "org-varaha-south", userId: "user-meridian", roleId: "role-payments-viewer-varaha", status: "active" },
+  { id: "mem-9", organizationId: "org-varaha-south", userId: "user-puro", roleId: "role-payments-viewer-varaha", status: "active" },
 ];
 
 export function getOrganization(id: string): Organization | undefined {

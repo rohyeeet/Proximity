@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { genId } from "@/lib/utils";
+import type { ConsentRequiredRole } from "@/types";
 
 /**
  * Fans out a "this form changed" notification to everyone who's actually submitted real
@@ -39,4 +40,52 @@ export async function notifyFormPublished(formTemplateId: string, formName: stri
   if (notifications.length > 0) {
     await prisma.notification.createMany({ data: notifications });
   }
+}
+
+/** Fans out to whichever real people hold each required-role sign-off on a freshly-filed claim —
+ * investor/registry parties via PaymentAgreementParty, platform_ops via every platform admin. */
+export async function notifyConsentNeeded(
+  paymentAgreementId: string,
+  milestoneLabel: string,
+  requiredRoles: ConsentRequiredRole[]
+): Promise<void> {
+  const userIds = new Set<string>();
+  const partyRoles = requiredRoles.filter((role): role is "investor" | "registry" => role === "investor" || role === "registry");
+  if (partyRoles.length > 0) {
+    const parties = await prisma.paymentAgreementParty.findMany({
+      where: { paymentAgreementId, role: { in: partyRoles } },
+      select: { userId: true },
+    });
+    for (const party of parties) userIds.add(party.userId);
+  }
+  if (requiredRoles.includes("platform_ops")) {
+    const admins = await prisma.user.findMany({ where: { isPlatformAdmin: true }, select: { id: true } });
+    for (const admin of admins) userIds.add(admin.id);
+  }
+  if (userIds.size === 0) return;
+  await prisma.notification.createMany({
+    data: [...userIds].map((userId) => ({
+      id: genId("notif"),
+      userId,
+      type: "claim_needs_consent",
+      title: "A claim needs your consent",
+      body: `"${milestoneLabel}" has a new claim awaiting your sign-off.`,
+      linkUrl: `/payments/${paymentAgreementId}`,
+    })),
+  });
+}
+
+/** Confirms settlement back to the ground partner who filed the claim — the moment their claimed
+ * amount actually clears via Proximity Pay. */
+export async function notifyPayoutPaid(paymentAgreementId: string, submittedByUserId: string, milestoneLabel: string, amount: number, currency: string): Promise<void> {
+  await prisma.notification.create({
+    data: {
+      id: genId("notif"),
+      userId: submittedByUserId,
+      type: "payout_paid",
+      title: "Payout settled",
+      body: `A ${currency} ${amount.toFixed(2)} payout for "${milestoneLabel}" was paid via Proximity Pay.`,
+      linkUrl: `/payments/${paymentAgreementId}`,
+    },
+  });
 }

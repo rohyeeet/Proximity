@@ -18,7 +18,10 @@ export async function POST(request: Request): Promise<NextResponse> {
           throw new Error("Not authenticated");
         }
         return {
-          allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"],
+          // Payments claim evidence can be a PDF (dMRV export, registry document, invoice scan) in
+          // addition to the image types Collect's capture fields upload — kept as one shared route
+          // since the auth/token gating is identical either way.
+          allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"],
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({ userId: session.user.id }),
         };

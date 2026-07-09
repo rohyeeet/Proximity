@@ -6,3 +6,4 @@ export * from "./flows";
 export * from "./submissions";
 export * from "./connectors";
 export * from "./knowledge-base";
+export * from "./payments";

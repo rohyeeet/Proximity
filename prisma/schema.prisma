@@ -7,7 +7,7 @@
 // records. Everything that's ever filtered, joined, or counted in SQL is a real column.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // "native" covers local dev (macOS/Windows/whatever you're on); "debian-openssl-3.0.x" covers
   // the node:20-bookworm-slim base image used by the Cloud Run Dockerfile. Vercel's build
   // environment is handled automatically by Vercel's own Prisma integration.
@@ -46,10 +46,11 @@ model Organization {
   status       String // "active" | "suspended" | "trial"
   createdAt    DateTime
 
-  domainPack  DomainPack      @relation(fields: [domainPackId], references: [id])
-  roles       Role[]
-  memberships OrgMembership[]
-  connectors  Connector[]
+  domainPack        DomainPack         @relation(fields: [domainPackId], references: [id])
+  roles             Role[]
+  memberships       OrgMembership[]
+  connectors        Connector[]
+  paymentAgreements PaymentAgreement[]
 
   @@index([domainPackId])
 }
@@ -57,28 +58,29 @@ model Organization {
 // ---------- Identity & access ----------
 
 model User {
-  id             String  @id
-  fullName       String
-  email          String  @unique
-  passwordHash   String
-  avatarInitials String
-  status         String // "active" | "invited" | "disabled"
+  id              String  @id
+  fullName        String
+  email           String  @unique
+  passwordHash    String
+  avatarInitials  String
+  status          String // "active" | "invited" | "disabled"
   // Platform tier is cross-org and intentionally NOT modeled as an OrgMembership (a platform
   // admin isn't "a member" of any one org) — matches src/types/identity.ts's CurrentSession.isPlatformAdmin.
   isPlatformAdmin Boolean @default(false)
   // Onboarding profile details, captured when a Team & Access admin invites someone.
-  mobileNumber String?
-  country      String?
-  state        String?
-  district     String?
+  mobileNumber    String?
+  country         String?
+  state           String?
+  district        String?
 
-  memberships   OrgMembership[]
-  submissions   Submission[]   @relation("SubmittedBy")
-  notifications Notification[]
+  memberships             OrgMembership[]
+  submissions             Submission[]            @relation("SubmittedBy")
+  notifications           Notification[]
+  paymentAgreementParties PaymentAgreementParty[]
 }
 
 model Role {
-  id             String  @id
+  id             String   @id
   organizationId String? // null for platform-tier roles (e.g. Super Admin)
   name           String
   tier           String // RoleTier
@@ -130,12 +132,12 @@ model Stage {
 }
 
 model FormTemplate {
-  id          String @id
+  id           String @id
   domainPackId String
-  code        String
-  name        String
-  description String
-  category    String
+  code         String
+  name         String
+  description  String
+  category     String
 
   domainPack  DomainPack            @relation(fields: [domainPackId], references: [id])
   versions    FormTemplateVersion[]
@@ -227,7 +229,7 @@ model Connector {
 }
 
 model Device {
-  id             String  @id
+  id             String @id
   connectorId    String
   name           String
   externalRef    String
@@ -243,7 +245,7 @@ model Device {
 }
 
 model TelemetryStream {
-  id            String  @id @default(cuid())
+  id            String @id @default(cuid())
   deviceId      String
   parameterCode String
   unit          String
@@ -261,14 +263,223 @@ model TelemetryStream {
 model Notification {
   id             String    @id @default(cuid())
   userId         String
-  type           String // "form_published" | ...
+  type           String // "form_published" | "claim_needs_consent" | "payout_blocked_on_bav" | "milestone_confirmed_by_registry" | ...
   title          String
   body           String
   formTemplateId String?
+  // Generic destination for any notification type added after formTemplateId — avoids adding a
+  // new nullable FK column per new notifiable entity (claims, agreements, payouts, ...).
+  linkUrl        String?
   createdAt      DateTime  @default(now())
   readAt         DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---------- Payments ("Proximity Pay") ----------
+//
+// Milestone-gated offtake agreements: a buyer/project agreement (PaymentAgreement) has a milestone
+// schedule; a ground partner files a MilestoneClaim with EvidenceAttachments per milestone; it
+// becomes payable once every required StakeholderConsent is approved; PayoutInstructions (one per
+// revenue-split participant) then clear a KYC/BAV dual gate before Proximity Pay (simulated, see
+// src/lib/proximity-pay.ts) settles them. All "who did this" fields are plain userId scalars
+// resolved via the existing getUser() lookup, matching how Submission.submittedByUserId /
+// ReviewActionRecord.reviewerUserId are already resolved elsewhere — not Prisma relations, to avoid
+// relation-name churn on User for what are display-only references.
+
+model PaymentAgreement {
+  id                       String   @id
+  organizationId           String
+  buyerName                String
+  projectName              String
+  currency                 String
+  totalValue               Float
+  pricePerCredit           Float?
+  escrowInterestAllocation String // "buyer" | "pool" | "platform"
+  fxRateTimingPolicy       String // "lock_at_consent" | "apply_at_execution"
+  status                   String // "draft" | "active" | "completed"
+  createdByUserId          String
+  createdAt                DateTime @default(now())
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  splitRules   SplitRule[]
+  milestones   Milestone[]
+  parties      PaymentAgreementParty[]
+  recipients   PayoutRecipient[]
+  escrow       EscrowAccount?
+  auditEntries PaymentAuditLogEntry[]
+
+  @@index([organizationId])
+}
+
+model SplitRule {
+  id                 String @id
+  paymentAgreementId String
+  participantRole    String // "platform" | "developer" | "farmer_community" | "investor"
+  percent            Float
+
+  paymentAgreement PaymentAgreement @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+
+  @@index([paymentAgreementId])
+}
+
+model Milestone {
+  id                 String  @id
+  paymentAgreementId String
+  type               String // "setup_capex" | "achievement" | "monitoring_cycle"
+  label              String
+  percentOfTotal     Float
+  verificationSource String
+  registryRef        String?
+  order              Int
+  status             String // "not_due" | "claim_submitted" | "consented" | "paid"
+
+  paymentAgreement   PaymentAgreement    @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+  claims             MilestoneClaim[]
+  payoutInstructions PayoutInstruction[]
+
+  @@index([paymentAgreementId])
+}
+
+model MilestoneClaim {
+  id                String   @id
+  milestoneId       String
+  submittedByUserId String
+  submittedAt       DateTime @default(now())
+  claimedAmount     Float
+  status            String // "submitted" | "consented" | "rejected" | "paid"
+
+  milestone          Milestone            @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  evidence           EvidenceAttachment[]
+  consents           StakeholderConsent[]
+  payoutInstructions PayoutInstruction[]
+
+  @@index([milestoneId])
+}
+
+model EvidenceAttachment {
+  id          String   @id
+  claimId     String
+  sourceType  String // "dmrv_export" | "site_inspection_photo" | "production_log" | "registry_document" | "other"
+  fileRef     String
+  fileName    String
+  hash        String
+  submittedAt DateTime @default(now())
+
+  claim MilestoneClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+model StakeholderConsent {
+  id                String    @id
+  claimId           String
+  requiredRole      String // "investor" | "platform_ops" | "registry"
+  consentedByUserId String?
+  consentedAt       DateTime?
+  status            String // "pending" | "approved" | "rejected"
+  rejectionReason   String?
+
+  claim MilestoneClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+// Cross-org, resource-scoped access grant for investor/registry parties — deliberately NOT an
+// OrgMembership, since these personas need visibility into a specific agreement regardless of
+// (and independent from) any org-staff membership. See src/lib/authz.ts's requirePaymentPartyAccess.
+model PaymentAgreementParty {
+  id                 String @id
+  paymentAgreementId String
+  userId             String
+  role               String // "investor" | "registry"
+  investedAmount     Float?
+
+  paymentAgreement PaymentAgreement @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentAgreementId, userId, role])
+  @@index([userId])
+}
+
+model PayoutRecipient {
+  id                 String    @id
+  paymentAgreementId String
+  role               String // "developer" | "farmer_community"
+  name               String
+  kycStatus          String // "not_started" | "in_review" | "approved" | "rejected" | "re_verification_required"
+  bavStatus          String
+  kycVerifiedAt      DateTime?
+  bavVerifiedAt      DateTime?
+
+  paymentAgreement   PaymentAgreement    @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+  payoutInstructions PayoutInstruction[]
+
+  @@index([paymentAgreementId])
+}
+
+model PayoutInstruction {
+  id              String    @id
+  milestoneId     String
+  claimId         String
+  recipientId     String?
+  participantRole String // "platform" | "developer" | "farmer_community" | "investor"
+  amount          Float
+  currency        String
+  status          String // "blocked_awaiting_verification" | "blocked_awaiting_kyc" | "blocked_awaiting_bav" | "ready" | "routed" | "paid"
+  proximityPayRef String?
+  paidAt          DateTime?
+
+  milestone Milestone        @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  claim     MilestoneClaim   @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  recipient PayoutRecipient? @relation(fields: [recipientId], references: [id])
+  overrides GateOverride[]
+
+  @@index([milestoneId])
+  @@index([claimId])
+  @@index([recipientId])
+}
+
+model EscrowAccount {
+  id                    String   @id
+  paymentAgreementId    String   @unique
+  heldAmount            Float
+  currency              String
+  corePortionBalance    Float
+  interestAccruedToDate Float    @default(0)
+  status                String // "holding" | "partially_released" | "fully_released"
+  fundedAt              DateTime @default(now())
+
+  paymentAgreement PaymentAgreement @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+}
+
+model GateOverride {
+  id                       String   @id
+  payoutInstructionId      String
+  overriddenGate           String // "kyc" | "bav" | "both"
+  partnerApprovalByUserId  String?
+  investorApprovalByUserId String?
+  justification            String
+  status                   String // "pending" | "granted" | "denied"
+  createdAt                DateTime @default(now())
+
+  payoutInstruction PayoutInstruction @relation(fields: [payoutInstructionId], references: [id], onDelete: Cascade)
+
+  @@index([payoutInstructionId])
+}
+
+model PaymentAuditLogEntry {
+  id                 String   @id
+  paymentAgreementId String
+  eventType          String
+  payload            Json
+  timestamp          DateTime @default(now())
+  previousHash       String
+  hash               String
+
+  paymentAgreement PaymentAgreement @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+
+  @@index([paymentAgreementId])
 }

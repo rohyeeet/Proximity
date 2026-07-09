@@ -60,6 +60,18 @@ export default async function CollectSubmissionDetailPage({ params }: { params: 
               <div key={action.id} className="text-[12.5px] text-warn-text">
                 {action.reason && <p className="font-medium">{action.reason}</p>}
                 {action.guidance && <p className="mt-1">{action.guidance}</p>}
+                {action.fieldFlags && action.fieldFlags.length > 0 && (
+                  <ul className="mt-2 flex flex-col gap-1 rounded-md bg-surface px-2.5 py-1.5">
+                    {action.fieldFlags.map((flag) => (
+                      <li key={flag.fieldCode}>
+                        <span className="font-medium">
+                          {(fields ?? []).find((f) => f.fieldCode === flag.fieldCode)?.label ?? flag.fieldCode}:
+                        </span>{" "}
+                        {flag.remark}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           <Link href={`/collect/forms/${form.id}?resubmit=${submission.id}`} className="mt-3 block">

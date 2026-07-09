@@ -7,3 +7,4 @@ export * from "./submissions";
 export * from "./connectors";
 export * from "./analytics";
 export * from "./notifications";
+export * from "./payments";

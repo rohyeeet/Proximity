@@ -35,11 +35,19 @@ export interface SubmissionVersionRecord {
   reason?: string;
 }
 
+/** A single flagged answer within a "returned for correction" review action — lets a reviewer
+ * point at exactly which cells are wrong instead of only leaving one whole-record reason. */
+export interface FieldFlag {
+  fieldCode: string;
+  remark: string;
+}
+
 export interface ReviewActionRecord {
   id: string;
   outcome: ReviewOutcome;
   reason?: string;
   guidance?: string;
+  fieldFlags?: FieldFlag[];
   reviewerUserId: string;
   createdAt: string;
 }
