@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Check, Download, Eye, Flag, History } from "lucide-react";
+import { Check, Download, Eye, Flag, History, X } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -13,10 +14,82 @@ import { GeoCellDetail } from "./GeoCellDetail";
 import { FieldFlagDrawer } from "./FieldFlagDrawer";
 import { useSession } from "@/lib/session";
 import { canReview } from "@/lib/permissions";
-import { decodeGeoBoundary, decodeGeoPoint } from "@/lib/form-fields";
+import { cn, formatBytes, formatDate, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { decodeGeoBoundary, decodeGeoPoint, type GeoPoint } from "@/lib/form-fields";
 import { buildValidationColumns, isAnswerEmpty, resolveCell, type ValidationColumn } from "@/lib/validation-table";
-import { formatDate, formatRelativeTime } from "@/lib/utils";
-import type { FieldFlag, FormTemplate, FormTemplateVersion, Submission } from "@/types";
+import type { EvidenceFile, FieldFlag, FormTemplate, FormTemplateVersion, Submission } from "@/types";
+
+const GeoMapView = dynamic(() => import("./GeoMapView").then((m) => m.GeoMapView), { ssr: false });
+
+/** Which single cell's enlarged detail is currently expanded inline under its row — replaces the
+ * old per-cell Modal popups (which greyed out and hid the rest of the table) with an accordion
+ * panel that opens directly beneath the row instead, so the reviewer keeps full table context. */
+type ExpandedDetail =
+  | { rowId: string; fieldCode: string; label: string; kind: "geo"; points: GeoPoint[]; boundary: boolean }
+  | { rowId: string; fieldCode: string; label: string; kind: "evidence"; file: EvidenceFile };
+
+function ExpandedDetailPanel({ detail, onClose }: { detail: ExpandedDetail; onClose: () => void }) {
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-semibold text-ink">{detail.label}</p>
+        <button onClick={onClose} aria-label="Collapse" className="flex size-7 shrink-0 items-center justify-center rounded text-ink-soft hover:bg-surface">
+          <X className="size-4" />
+        </button>
+      </div>
+      {detail.kind === "geo" ? (
+        <div className="max-w-3xl">
+          <GeoMapView points={detail.points} closed={detail.boundary} size="lg" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          {detail.file.url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={detail.file.url}
+              alt={detail.file.fileName}
+              className="max-h-[420px] w-full max-w-md rounded-md border border-border object-contain sm:w-auto"
+            />
+          ) : (
+            <p className="text-[12.5px] text-ink-soft">No hosted file for this evidence entry.</p>
+          )}
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] sm:min-w-[220px]">
+            {detail.file.capturedAt && (
+              <div>
+                <dt className="text-[11.5px] text-ink-soft">Captured</dt>
+                <dd className="text-ink">{formatDateTime(detail.file.capturedAt)}</dd>
+              </div>
+            )}
+            {detail.file.sizeBytes !== undefined && (
+              <div>
+                <dt className="text-[11.5px] text-ink-soft">Size</dt>
+                <dd className="text-ink">{formatBytes(detail.file.sizeBytes)}</dd>
+              </div>
+            )}
+            {detail.file.mimeType && (
+              <div>
+                <dt className="text-[11.5px] text-ink-soft">Type</dt>
+                <dd className="text-ink">{detail.file.mimeType}</dd>
+              </div>
+            )}
+            {detail.file.geo && (
+              <div>
+                <dt className="text-[11.5px] text-ink-soft">Geotag</dt>
+                <dd className="text-ink">
+                  {detail.file.geo.latitude.toFixed(5)}, {detail.file.geo.longitude.toFixed(5)}
+                  {detail.file.geo.accuracy !== undefined && <span className="text-ink-soft"> (±{Math.round(detail.file.geo.accuracy)}m)</span>}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {detail.file.smartCheckSummary && (
+            <p className="rounded-md bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-soft sm:max-w-xs">{detail.file.smartCheckSummary}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const filterOptions = [
   { value: "all", label: "All" },
@@ -41,7 +114,9 @@ function renderCellValue(
   earliestKnownVersionNo: number,
   answersByCode: Map<string, Submission["answers"][number]["value"]>,
   evidenceById: Map<string, Submission["evidence"][number]>,
-  linkedRecordsById: Record<string, { formTemplateId: string; displayId: string }>
+  linkedRecordsById: Record<string, { formTemplateId: string; displayId: string }>,
+  expandedKey: { rowId: string; fieldCode: string } | null,
+  onToggleExpand: (detail: ExpandedDetail) => void
 ) {
   const cell = resolveCell(column, row, earliestKnownVersionNo);
   if (cell.kind === "not_collected") {
@@ -63,15 +138,41 @@ function renderCellValue(
     case "document_scan":
     case "signature": {
       const file = evidenceById.get(String(raw));
-      return file ? <EvidenceCellDetail file={file} /> : <span className="text-critical-text">Missing file</span>;
+      if (!file) return <span className="text-critical-text">Missing file</span>;
+      const active = expandedKey?.rowId === row.id && expandedKey.fieldCode === field.fieldCode;
+      return (
+        <EvidenceCellDetail
+          file={file}
+          active={active}
+          onToggle={() => onToggleExpand({ rowId: row.id, fieldCode: field.fieldCode, label: field.label, kind: "evidence", file })}
+        />
+      );
     }
     case "geo_point": {
       const point = decodeGeoPoint(String(raw));
-      return point ? <GeoCellDetail points={[point]} kind="geo_point" /> : <span className="text-ink-soft">Invalid location</span>;
+      if (!point) return <span className="text-ink-soft">Invalid location</span>;
+      const active = expandedKey?.rowId === row.id && expandedKey.fieldCode === field.fieldCode;
+      return (
+        <GeoCellDetail
+          points={[point]}
+          kind="geo_point"
+          active={active}
+          onToggle={() => onToggleExpand({ rowId: row.id, fieldCode: field.fieldCode, label: field.label, kind: "geo", points: [point], boundary: false })}
+        />
+      );
     }
     case "geo_boundary": {
       const points = decodeGeoBoundary(String(raw));
-      return points.length > 0 ? <GeoCellDetail points={points} kind="geo_boundary" /> : <span className="text-ink-soft">Invalid boundary</span>;
+      if (points.length === 0) return <span className="text-ink-soft">Invalid boundary</span>;
+      const active = expandedKey?.rowId === row.id && expandedKey.fieldCode === field.fieldCode;
+      return (
+        <GeoCellDetail
+          points={points}
+          kind="geo_boundary"
+          active={active}
+          onToggle={() => onToggleExpand({ rowId: row.id, fieldCode: field.fieldCode, label: field.label, kind: "geo", points, boundary: true })}
+        />
+      );
     }
     case "boolean":
       return <span className="text-ink">{raw === true || raw === "true" ? "Yes" : "No"}</span>;
@@ -119,6 +220,12 @@ export function RecordsGridClient({
   const [historyRowId, setHistoryRowId] = useState<string | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  // expandedKey drives the CSS open/close transition; panelDetail is what's actually rendered and
+  // deliberately stays set through the close animation (only expandedKey clears), so the content
+  // doesn't vanish mid-collapse. See toggleExpanded below for the mount-closed-then-open sequencing.
+  const [expandedKey, setExpandedKey] = useState<{ rowId: string; fieldCode: string } | null>(null);
+  const [panelDetail, setPanelDetail] = useState<ExpandedDetail | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("highlight");
@@ -156,6 +263,23 @@ export function RecordsGridClient({
   const filtered = filter === "all" ? rows : rows.filter((s) => s.reviewStatus === filter);
   const flagRow = flagRowId ? rows.find((r) => r.id === flagRowId) : undefined;
   const historyRow = historyRowId ? rows.find((r) => r.id === historyRowId) : undefined;
+
+  function toggleExpanded(detail: ExpandedDetail) {
+    const isSame = expandedKey?.rowId === detail.rowId && expandedKey.fieldCode === detail.fieldCode;
+    if (isSame) {
+      setExpandedKey(null); // panelDetail stays so the panel keeps rendering while it animates closed
+      return;
+    }
+    // Mount (or re-target) the panel closed first, then flip it open a frame later — guarantees a
+    // real transition every time, including jumping straight from one row's open cell to another's.
+    setExpandedKey(null);
+    setPanelDetail(detail);
+    // The enlarged panel spans the full row width starting from its left edge — if the table is
+    // currently scrolled right (e.g. to see a column near the sticky Review column), the panel's
+    // own content would open partially clipped off-screen unless the table scrolls back to 0 first.
+    scrollContainerRef.current?.scrollTo({ left: 0 });
+    requestAnimationFrame(() => requestAnimationFrame(() => setExpandedKey({ rowId: detail.rowId, fieldCode: detail.fieldCode })));
+  }
 
   function toggleRemovedColumn(fieldCode: string) {
     setVisibleRemoved((prev) => {
@@ -238,7 +362,7 @@ export function RecordsGridClient({
       {filtered.length === 0 ? (
         <EmptyState title="No records match this filter." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div ref={scrollContainerRef} className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-max border-collapse text-left text-[13.5px]">
             <thead>
               <tr className="bg-sunken">
@@ -264,9 +388,10 @@ export function RecordsGridClient({
                 const isPending = pendingRowId === row.id;
                 const isActionable = canAct && row.reviewStatus !== "approved" && row.reviewStatus !== "needs_fix";
                 const hasHistory = row.reviewActions.length > 0 || row.versions.length > 1 || row.smartCheckSummary;
+                const isOpen = expandedKey?.rowId === row.id;
                 return (
+                <Fragment key={row.id}>
                   <tr
-                    key={row.id}
                     id={`record-row-${row.id}`}
                     className={highlightId === row.id ? "border-t border-border bg-brand-50" : "border-t border-border bg-surface"}
                   >
@@ -299,7 +424,9 @@ export function RecordsGridClient({
                           earliestKnownVersionNo,
                           answersByRowId.get(row.id)!,
                           evidenceByRowId.get(row.id)!,
-                          linkedRecordsById
+                          linkedRecordsById,
+                          expandedKey,
+                          toggleExpanded
                         )}
                       </td>
                     ))}
@@ -322,6 +449,18 @@ export function RecordsGridClient({
                       )}
                     </td>
                   </tr>
+                  {panelDetail && panelDetail.rowId === row.id && (
+                    <tr>
+                      <td colSpan={visibleColumns.length + 2} className="p-0">
+                        <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                          <div className="overflow-hidden bg-sunken/50">
+                            <ExpandedDetailPanel detail={panelDetail} onClose={() => setExpandedKey(null)} />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
                 );
               })}
             </tbody>

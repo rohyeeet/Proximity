@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, CircleMarker, Polygon, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { cn } from "@/lib/utils";
 import type { GeoPoint } from "@/lib/form-fields";
 
 /** Only ever loaded client-side via next/dynamic({ ssr: false }) — Leaflet touches `window` at
@@ -22,14 +23,15 @@ function FitBounds({ points }: { points: GeoPoint[] }) {
   return null;
 }
 
-export function GeoMapView({ points, closed }: { points: GeoPoint[]; closed: boolean }) {
+export function GeoMapView({ points, closed, size = "sm" }: { points: GeoPoint[]; closed: boolean; size?: "sm" | "lg" }) {
+  const heightClassName = size === "lg" ? "h-[440px]" : "h-56";
   const first = points[0];
   if (!first) {
-    return <div className="flex h-56 items-center justify-center text-[13px] text-ink-soft">No coordinates captured.</div>;
+    return <div className={cn("flex items-center justify-center text-[13px] text-ink-soft", heightClassName)}>No coordinates captured.</div>;
   }
 
   return (
-    <MapContainer center={[first.lat, first.lng]} zoom={16} className="h-56 w-full rounded-md" scrollWheelZoom={false}>
+    <MapContainer center={[first.lat, first.lng]} zoom={16} className={cn(heightClassName, "w-full rounded-md")} scrollWheelZoom={size === "lg"}>
       {/* Satellite by default (Esri World Imagery, no API key) with a labels overlay on top so
           roads/POIs a reviewer needs to sanity-check a boundary against — e.g. a named clinic or
           road — stay visible over the imagery, not just a bare aerial photo. */}
