@@ -30,7 +30,17 @@ export function GeoMapView({ points, closed }: { points: GeoPoint[]; closed: boo
 
   return (
     <MapContainer center={[first.lat, first.lng]} zoom={16} className="h-56 w-full rounded-md" scrollWheelZoom={false}>
-      <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      {/* Satellite by default (Esri World Imagery, no API key) with a labels overlay on top so
+          roads/POIs a reviewer needs to sanity-check a boundary against — e.g. a named clinic or
+          road — stay visible over the imagery, not just a bare aerial photo. */}
+      <TileLayer
+        attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics"
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      />
+      <TileLayer
+        attribution="Esri Reference"
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+      />
       <FitBounds points={points} />
       {closed && points.length > 2 && <Polygon positions={points.map((p) => [p.lat, p.lng])} pathOptions={{ color: "#2563eb", weight: 2 }} />}
       {points.map((point, i) => (

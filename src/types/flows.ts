@@ -10,6 +10,18 @@ export type FlowNodeType =
   | "document"
   | "milestone";
 
+export type TrackerAggregation = "sum" | "avg" | "min" | "max";
+
+/** Defines a live operational metric to roll up for this node's linked form — e.g. total tonnage
+ * processed, average facility capacity. Restricted to "number" fields (see field-type-catalog);
+ * computed from that form's own submissions, not stored/cached. */
+export interface FlowNodeTracker {
+  fieldCode: string;
+  aggregation: TrackerAggregation;
+  /** Optional override — default label is "<AGG> of <field label>". */
+  label?: string;
+}
+
 export interface FlowNodeDefinition {
   id: string;
   nodeType: FlowNodeType;
@@ -20,6 +32,7 @@ export interface FlowNodeDefinition {
   assignedRoleTier?: string;
   /** Set only on nodes owned by the stage-sync engine — one per (stage, form) pair. */
   sourceStageId?: string;
+  tracker?: FlowNodeTracker;
 }
 
 export type FlowConditionOperator = "equals" | "not_equals" | "greater_than" | "less_than";

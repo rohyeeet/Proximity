@@ -1,5 +1,16 @@
 import { prisma } from "@/lib/db";
-import type { AnalyticsCard, AnalyticsSeries, ReviewActionRecord, SubmissionVersionRecord } from "@/types";
+import { getFlowTemplate, getFormTemplate, getStagesByDomainPack, getSubmissionsByForm } from "@/lib/queries";
+import type {
+  AnalyticsCard,
+  AnalyticsSeries,
+  FlowNodeDefinition,
+  FlowSummary,
+  FormFlowSummary,
+  ReviewActionRecord,
+  StageFlowSummary,
+  SubmissionVersionRecord,
+  TrackerAggregation,
+} from "@/types";
 
 /**
  * Every number here is computed from this organization's real Submission/Device rows — nothing
@@ -125,4 +136,137 @@ export async function getAnalyticsSeries(organizationId: string): Promise<Analyt
     { key: "submissions_per_week", label: "Submissions per week", points: submissionCounts },
     { key: "correction_rate", label: "Correction rate (%)", unit: "%", points: correctionRates },
   ];
+}
+
+const AGGREGATION_LABELS: Record<TrackerAggregation, string> = { sum: "SUM", avg: "AVG", min: "MIN", max: "MAX" };
+
+function aggregate(values: number[], kind: TrackerAggregation): number {
+  switch (kind) {
+    case "sum":
+      return values.reduce((a, b) => a + b, 0);
+    case "avg":
+      return values.reduce((a, b) => a + b, 0) / values.length;
+    case "min":
+      return Math.min(...values);
+    case "max":
+      return Math.max(...values);
+  }
+}
+
+/**
+ * Per-form (and per-stage) roll-up for the Overview page's flow summary: SLA, top rejection
+ * reasons, accept/reject/pending counts, which stage is the current bottleneck, and which stage
+ * has the highest drop-off rate — computed live from this organization's real submissions against
+ * the forms actually referenced by the flow's own nodes (never every form in the domain pack).
+ */
+export async function getFlowSummary(flowId: string, organizationId: string): Promise<FlowSummary | undefined> {
+  const flow = await getFlowTemplate(flowId);
+  if (!flow) return undefined;
+
+  const stages = await getStagesByDomainPack(flow.domainPackId);
+  const stageByFormTemplateId = new Map<string, string>();
+  for (const stage of stages) {
+    for (const formTemplateId of stage.formTemplateIds) stageByFormTemplateId.set(formTemplateId, stage.id);
+  }
+  const stageNameById = new Map(stages.map((s) => [s.id, s.name]));
+
+  // One node per form, in flow order — a hand-added node sharing a form with a stage-synced node
+  // would otherwise double-count that form's submissions in both the form list and stage roll-up.
+  const nodesByForm = new Map<string, FlowNodeDefinition>();
+  for (const node of flow.nodes) {
+    if (node.formTemplateId && !nodesByForm.has(node.formTemplateId)) nodesByForm.set(node.formTemplateId, node);
+  }
+
+  const forms: FormFlowSummary[] = [];
+  for (const [formTemplateId, node] of nodesByForm) {
+    const form = await getFormTemplate(formTemplateId);
+    if (!form) continue;
+    const submissions = await getSubmissionsByForm(formTemplateId, organizationId);
+
+    const total = submissions.length;
+    const approved = submissions.filter((s) => s.reviewStatus === "approved").length;
+    const needsFix = submissions.filter((s) => s.reviewStatus === "needs_fix").length;
+    const pending = submissions.filter((s) => s.reviewStatus === "needs_check" || s.reviewStatus === "on_hold" || s.reviewStatus === "draft").length;
+    const decided = total - submissions.filter((s) => s.reviewStatus === "draft").length;
+    const approvalRatePct = decided > 0 ? Math.round((approved / decided) * 100) : null;
+
+    const slaHours: number[] = [];
+    const reasonCounts = new Map<string, number>();
+    for (const submission of submissions) {
+      const reviewActions = submission.reviewActions;
+      const firstApproval = reviewActions.find((a) => a.outcome === "approved");
+      if (firstApproval) {
+        const hours = (new Date(firstApproval.createdAt).getTime() - submittedAt(submission.versions)) / (1000 * 60 * 60);
+        if (hours >= 0) slaHours.push(hours);
+      }
+      for (const action of reviewActions) {
+        if (action.outcome !== "returned_for_correction" || !action.reason) continue;
+        reasonCounts.set(action.reason, (reasonCounts.get(action.reason) ?? 0) + 1);
+      }
+    }
+    const avgSlaHours = slaHours.length > 0 ? slaHours.reduce((a, b) => a + b, 0) / slaHours.length : null;
+    const topRejectionReasons = [...reasonCounts.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    let tracker: FormFlowSummary["tracker"];
+    if (node.tracker) {
+      const field = form.currentVersion.fields.find((f) => f.fieldCode === node.tracker!.fieldCode);
+      const values = submissions
+        .map((s) => s.answers.find((a) => a.fieldCode === node.tracker!.fieldCode)?.value)
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n));
+      if (values.length > 0) {
+        tracker = {
+          label: node.tracker.label ?? `${AGGREGATION_LABELS[node.tracker.aggregation]} of ${field?.label ?? node.tracker.fieldCode}`,
+          value: aggregate(values, node.tracker.aggregation),
+          unit: field?.unit,
+        };
+      }
+    }
+
+    const stageId = node.sourceStageId ?? stageByFormTemplateId.get(formTemplateId);
+    forms.push({
+      formTemplateId,
+      formName: form.name,
+      stageId,
+      stageName: stageId ? stageNameById.get(stageId) : undefined,
+      total,
+      approved,
+      needsFix,
+      pending,
+      approvalRatePct,
+      avgSlaHours,
+      topRejectionReasons,
+      tracker,
+    });
+  }
+
+  const stageTotals = new Map<string, { pending: number; total: number; needsFix: number }>();
+  for (const f of forms) {
+    if (!f.stageId) continue;
+    const entry = stageTotals.get(f.stageId) ?? { pending: 0, total: 0, needsFix: 0 };
+    entry.pending += f.pending;
+    entry.total += f.total;
+    entry.needsFix += f.needsFix;
+    stageTotals.set(f.stageId, entry);
+  }
+  const stageSummaries: StageFlowSummary[] = [...stageTotals.entries()].map(([stageId, t]) => ({
+    stageId,
+    stageName: stageNameById.get(stageId) ?? stageId,
+    pending: t.pending,
+    total: t.total,
+    dropoffRatePct: t.total > 0 ? Math.round((t.needsFix / t.total) * 100) : null,
+  }));
+
+  const mostPendingStageId = stageSummaries.reduce<StageFlowSummary | undefined>(
+    (best, s) => (s.pending > 0 && (!best || s.pending > best.pending) ? s : best),
+    undefined
+  )?.stageId;
+  const mostDropoffStageId = stageSummaries
+    .filter((s) => s.total > 0 && (s.dropoffRatePct ?? 0) > 0)
+    .reduce<StageFlowSummary | undefined>((best, s) => (!best || (s.dropoffRatePct ?? 0) > (best.dropoffRatePct ?? 0) ? s : best), undefined)?.stageId;
+
+  return { flowId: flow.id, flowName: flow.name, forms, stages: stageSummaries, mostPendingStageId, mostDropoffStageId };
 }

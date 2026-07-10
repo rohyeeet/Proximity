@@ -220,6 +220,23 @@ export const knowledgeBase: KnowledgeTopic[] = [
     relatedTopicIds: ["flow-edge-kinds"],
   },
   {
+    id: "flow-tracker",
+    scope: "flow",
+    category: "Connections & rules",
+    title: "Tracking a metric per form step",
+    summary: "Pick a numeric field and an aggregation (SUM/AVG/MIN/MAX) to roll up on the Overview flow summary.",
+    steps: [
+      "Select a form-step (or automation/document) node that's linked to a form.",
+      "In the inspector's Tracker section, pick one of that form's numeric fields.",
+      "Choose an aggregation from the dropdown: SUM, AVG, MIN, or MAX.",
+    ],
+    body: [
+      "The tracker is computed live from that form's own submissions every time the Overview page loads — nothing is cached or precomputed, so it always reflects the current data.",
+      "Example: a \"Facility Setup\" node tracking AVG of capacity_t_day surfaces the average declared facility capacity across every setup record on the Overview flow summary, next to that form's SLA and approval breakdown.",
+    ],
+    relatedTopicIds: ["flow-node-types", "gs-entities"],
+  },
+  {
     id: "flow-validate",
     scope: "flow",
     category: "Before you publish",

@@ -218,6 +218,18 @@ works unchanged for them — that membership grants them nothing on its own.
 
 ## Features
 
+### Overview
+The landing dashboard — current flow health, what's blocked, and where to look next, computed live
+from the org's own submissions:
+- **Flow summary table** — one row per form referenced by the active flow, with an
+  **approved/pending/rejected** breakdown, **approval rate**, **average SLA** (time from submission
+  to first approval), and the **top rejection reason(s)** pulled from real review-action history.
+- **Bottleneck and drop-off callouts** — which stage currently has the most submissions waiting
+  (the process bottleneck) and which stage has the highest return-for-correction rate (where the
+  process is losing the most work), rolled up from the form-level numbers above.
+- **Tracker column** — see "Tracker" under Flow Studio below; any node's live metric surfaces here
+  automatically once configured.
+
 ### Studio
 - **Stage board** — ordered stages, each owning a set of forms and connectors; reorder, rename
   inline (pencil-icon editing, not "everything looks editable"), delete (admin-only, confirmed).
@@ -237,6 +249,10 @@ works unchanged for them — that membership grants them nothing on its own.
   cycles, unreachable nodes, missing start/milestone nodes, branches with fewer than two paths).
   "Sync from stages" reconciles the flow's backbone with the current Stage list without discarding
   hand-built detours like review gates.
+  - **Tracker** — any form-linked node can define a live operational metric: pick one of that
+    form's numeric fields and an aggregation (**SUM / AVG / MIN / MAX**, a dropdown) to roll up
+    across that form's submissions — e.g. average facility capacity, total tonnage processed.
+    Computed fresh on every load (never cached) and surfaced on the Overview flow summary.
 - **Knowledge base** — inline contextual help (`InfoHint`/`KnowledgeDrawer`) explaining Studio
   concepts without leaving the builder.
 
@@ -267,7 +283,8 @@ One row-wise table per form, not a form-by-form review queue — every question 
 reviewing and reporting happen in the same screen instead of opening each record individually:
 - **Type-aware cells** — a photo/document/signature answer is a chip that opens its capture
   metadata (timestamp, geotag, file size); a `geo_point`/`geo_boundary` answer opens a real Leaflet
-  map over OpenStreetMap tiles, rendering the actual captured polygon — not a raw coordinate dump.
+  map over satellite imagery (with a road/place labels overlay), rendering the actual captured
+  polygon — not a raw coordinate dump.
 - **Two review paths per row** — **Accept** the whole record in one click, or **Mark incorrect** to
   open a side panel and flag which *specific* answers are wrong with a remark per one; the flagged
   fields and remarks are surfaced back to the submitter on their own resubmit screen.
@@ -394,7 +411,7 @@ if industrial), optionally set an endpoint → bind it to a stage or a form's lo
 | Framework | Next.js 15 (App Router), React 19, TypeScript (strict) |
 | Styling | Tailwind CSS v4, design tokens in `src/app/globals.css` |
 | Flow canvas | `@xyflow/react` |
-| Maps | Leaflet / `react-leaflet` (OpenStreetMap tiles, no API key) — renders captured geo-boundary/point answers |
+| Maps | Leaflet / `react-leaflet` — satellite imagery by default (Esri World Imagery + a labels overlay, no API key) — renders captured geo-boundary/point answers |
 | Charts | Recharts |
 | Database | PostgreSQL (Neon), Prisma ORM v6 |
 | Auth | Auth.js v5 (Credentials, JWT sessions), bcryptjs |

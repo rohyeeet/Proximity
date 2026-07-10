@@ -195,14 +195,16 @@ function PayoutInstructionRow({
       </div>
 
       {instruction.recipient && (
-        <div className="flex items-center gap-3 text-[12px] text-ink-soft">
-          <span>{instruction.recipient.name}</span>
-          <span className="inline-flex items-center gap-1">
-            KYC <VerificationStatusChip status={instruction.recipient.kycStatus} />
-          </span>
-          <span className="inline-flex items-center gap-1">
-            BAV <VerificationStatusChip status={instruction.recipient.bavStatus} />
-          </span>
+        <div className="flex flex-col gap-1 text-[12px] text-ink-soft">
+          <p className="font-medium text-ink">{instruction.recipient.name}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              KYC <VerificationStatusChip status={instruction.recipient.kycStatus} />
+            </span>
+            <span className="inline-flex items-center gap-1">
+              BAV <VerificationStatusChip status={instruction.recipient.bavStatus} />
+            </span>
+          </div>
         </div>
       )}
 
@@ -330,8 +332,8 @@ export function MilestoneCard({
 
   return (
     <Card>
-      <CardHeader>
-        <div>
+      <CardHeader className="flex-wrap">
+        <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">
             {MILESTONE_TYPE_LABELS[milestone.type] ?? milestone.type} · {milestone.percentOfTotal}%
           </p>
@@ -342,7 +344,7 @@ export function MilestoneCard({
       <CardBody className="flex flex-col gap-3">
         {milestone.claims.map((claim) => (
           <div key={claim.id} className="rounded-md border border-border p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <p className="text-[13px] font-medium text-ink">{formatCurrency(claim.claimedAmount, currency)} claimed</p>
               <span className="text-[12px] text-ink-soft">
                 {userLabel(usersById, claim.submittedByUserId)} · {formatRelativeTime(claim.submittedAt)}

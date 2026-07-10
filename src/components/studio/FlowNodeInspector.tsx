@@ -1,13 +1,16 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { EntityPicker } from "./EntityPicker";
+import { FieldPicker } from "./FieldPicker";
 import { InfoHint } from "./knowledge/InfoHint";
 import { flowNodeMetaByType, suggestedNextTypes } from "./flow-node-catalog";
 import { useStudio } from "@/lib/studio";
-import type { FlowNodeDefinition, FlowNodeType } from "@/types";
+import type { FlowNodeDefinition, FlowNodeType, TrackerAggregation } from "@/types";
 
 const roleTierOptions = ["submitter", "reviewer", "org_admin", "org_sub_admin", "designer", "viewer"];
+
+const trackerAggregationLabels: Record<TrackerAggregation, string> = { sum: "SUM", avg: "AVG", min: "MIN", max: "MAX" };
 
 export function FlowNodeInspector({
   node,
@@ -93,6 +96,55 @@ export function FlowNodeInspector({
           {!linkedForm && (
             <p className="mt-1 text-[11.5px] text-warn-text">Not linked — this node won&apos;t collect data until it&apos;s connected to a form.</p>
           )}
+        </div>
+      )}
+
+      {supportsFormLink && linkedForm && (
+        <div>
+          <label className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
+            Tracker
+            <InfoHint topicId="flow-tracker" />
+          </label>
+          <p className="mb-1.5 text-[11.5px] leading-snug text-ink-soft">
+            Roll up a live metric from this form&apos;s submissions, shown on the Overview flow summary.
+          </p>
+          <div className="flex flex-col gap-1.5 rounded-md border border-border-strong bg-paper p-2.5">
+            <FieldPicker
+              fields={linkedForm.currentVersion.fields}
+              matchFieldType="number"
+              value={node.tracker?.fieldCode ?? null}
+              onChange={(fieldCode) =>
+                onChange({
+                  tracker: fieldCode ? { fieldCode, aggregation: node.tracker?.aggregation ?? "sum", label: node.tracker?.label } : undefined,
+                })
+              }
+              placeholder="Pick a numeric field to track…"
+            />
+            {node.tracker && (
+              <>
+                <select
+                  value={node.tracker.aggregation}
+                  onChange={(e) => onChange({ tracker: { ...node.tracker!, aggregation: e.target.value as TrackerAggregation } })}
+                  className="w-full rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-[13.5px] text-ink"
+                >
+                  {Object.entries(trackerAggregationLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => onChange({ tracker: undefined })}
+                  className="flex items-center gap-1 self-start text-[12px] font-medium text-ink-soft hover:text-critical-text"
+                >
+                  <X className="size-3.5" /> Clear tracker
+                </button>
+              </>
+            )}
+            {linkedForm.currentVersion.fields.every((f) => f.fieldType !== "number") && (
+              <p className="text-[11.5px] text-ink-soft">This form has no numeric fields to track yet.</p>
+            )}
+          </div>
         </div>
       )}
 
