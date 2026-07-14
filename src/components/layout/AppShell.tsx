@@ -4,7 +4,7 @@ import { SessionProvider } from "@/lib/session";
 import { StudioProvider } from "@/lib/studio";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
-import type { FlowTemplate, FormTemplate, Organization, Role, Stage, User } from "@/types";
+import type { FlowTemplate, FormTemplate, Organization, Project, Role, Stage, User } from "@/types";
 
 export function AppShell({
   user,
@@ -14,6 +14,7 @@ export function AppShell({
   initialForms,
   initialFlows,
   initialStages,
+  initialProjects,
   children,
 }: {
   user: User;
@@ -23,6 +24,7 @@ export function AppShell({
   initialForms: FormTemplate[];
   initialFlows: FlowTemplate[];
   initialStages: Stage[];
+  initialProjects: Project[];
   children: React.ReactNode;
 }) {
   return (
@@ -33,15 +35,16 @@ export function AppShell({
       initialActiveOrganizationId={initialActiveOrganizationId}
     >
       {/* Remounts the whole Studio store when the active org changes, so its state resets to the
-          freshly-scoped initialForms/initialFlows/initialStages the server just recomputed for the
-          newly active org — StudioProvider only reads its initial* props on first mount (lazy
-          useState initializers), so without this key it would keep showing the previous org's data
-          until a hard page reload. */}
+          freshly-scoped initialForms/initialFlows/initialStages/initialProjects the server just
+          recomputed for the newly active org — StudioProvider only reads its initial* props on
+          first mount (lazy useState initializers), so without this key it would keep showing the
+          previous org's data until a hard page reload. */}
       <StudioProvider
         key={initialActiveOrganizationId}
         initialForms={initialForms}
         initialFlows={initialFlows}
         initialStages={initialStages}
+        initialProjects={initialProjects}
       >
         <div className="flex h-screen overflow-hidden bg-paper">
           <Sidebar />

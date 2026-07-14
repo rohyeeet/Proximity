@@ -3,7 +3,7 @@ import type { FlowTemplate } from "@/types";
 export const flowTemplates: FlowTemplate[] = [
   {
     id: "flow-biochar-standard",
-    domainPackId: "pack-biochar-isometric",
+    projectId: "project-default-org-varaha-south",
     code: "biochar_standard_flow",
     name: "Isometric Biochar Standard Flow",
     status: "published",
@@ -41,7 +41,7 @@ export const flowTemplates: FlowTemplate[] = [
   },
   {
     id: "flow-green-hydrogen-standard",
-    domainPackId: "pack-green-hydrogen",
+    projectId: "project-default-org-novah2",
     code: "green_hydrogen_standard_flow",
     name: "Green Hydrogen Standard Flow",
     status: "published",
@@ -90,8 +90,8 @@ export const flowTemplates: FlowTemplate[] = [
   },
 ];
 
-export function getFlowTemplatesByDomainPack(domainPackId: string): FlowTemplate[] {
-  return flowTemplates.filter((flow) => flow.domainPackId === domainPackId);
+export function getFlowTemplatesByProject(projectId: string): FlowTemplate[] {
+  return flowTemplates.filter((flow) => flow.projectId === projectId);
 }
 
 export function getFlowTemplate(id: string): FlowTemplate | undefined {

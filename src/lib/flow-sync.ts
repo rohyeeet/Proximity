@@ -46,10 +46,11 @@ function canonicalBackbone(stages: Stage[], domainPackId: string): BackbonePair[
 export function syncFlowWithStages(
   flow: FlowTemplate,
   stages: Stage[],
+  domainPackId: string,
   getFormName: (formId: string) => string | undefined
 ): { flow: FlowTemplate; summary: string[] } {
   const summary: string[] = [];
-  const canonical = canonicalBackbone(stages, flow.domainPackId);
+  const canonical = canonicalBackbone(stages, domainPackId);
   const canonicalKeys = new Set(canonical.map((pair) => `${pair.stageId}::${pair.formId}`));
 
   const existingByKey = new Map<string, FlowNodeDefinition>();

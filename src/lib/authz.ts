@@ -37,6 +37,40 @@ export async function requireStudioEditAccess(domainPackId: string): Promise<Acc
   return { ok: true, userId: user.id };
 }
 
+/** Same shape as requireStudioEditAccess, but for a Flow — which is project-scoped, not
+ * domain-pack-scoped. Resolves the project's own organization and applies the same
+ * canEditStudio tier check, so a Flow mutation route just needs the projectId, not a
+ * pre-resolved organizationId. */
+export async function requireProjectEditAccess(projectId: string): Promise<AccessResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user || user.status !== "active") {
+    return { ok: false, status: 401, message: "Not authenticated" };
+  }
+
+  if (user.isPlatformAdmin) {
+    return { ok: true, userId: user.id };
+  }
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) {
+    return { ok: false, status: 403, message: "Project not found" };
+  }
+
+  const membership = await prisma.orgMembership.findFirst({
+    where: { userId: user.id, organizationId: project.organizationId, status: "active" },
+    include: { role: true },
+  });
+  if (!membership || !canEditStudio(membership.role.tier as RoleTier)) {
+    return { ok: false, status: 403, message: "You don't have edit access for this project" };
+  }
+  return { ok: true, userId: user.id };
+}
+
 /** View-only check: any active membership in the org (or platform admin) is enough to read its data. */
 export async function requireOrgAccess(organizationId: string): Promise<AccessResult> {
   const session = await auth();

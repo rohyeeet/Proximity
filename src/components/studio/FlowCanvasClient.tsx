@@ -60,7 +60,8 @@ function toRfNodes(flow: FlowTemplate, selection: Selection): Node<FlowNodeData>
       nodeType: node.nodeType,
       detail: node.detail,
       unlinked:
-        (node.nodeType === "form_step" || node.nodeType === "automation" || node.nodeType === "document") && !node.formTemplateId,
+        ((node.nodeType === "form_step" || node.nodeType === "automation" || node.nodeType === "document") && !node.formTemplateId) ||
+        (node.nodeType === "payment_step" && !node.milestoneTemplateId),
       fromStage: Boolean(node.sourceStageId),
     },
   }));
@@ -109,11 +110,14 @@ export function FlowCanvasClient({ flowId }: { flowId: string }) {
 }
 
 function FlowCanvasInner({ flowId }: { flowId: string }) {
-  const { getFlow, getForm, getStage, stages, updateFlow, publishFlow, isFlowDirty } = useStudio();
+  const { getFlow, getForm, getStage, getProject, stages, updateFlow, publishFlow, isFlowDirty } = useStudio();
   const { openList } = useKnowledge();
   const { session } = useSession();
   const canEdit = canEditStudio(session.role.tier);
   const flow = getFlow(flowId);
+  // A Flow is project-scoped; its domain pack (needed to search forms, sync stage backbones, etc.)
+  // is resolved one hop up through its project rather than carried directly on the flow row.
+  const domainPackId = flow ? getProject(flow.projectId)?.domainPackId : undefined;
   const reactFlow = useReactFlow();
 
   const [selection, setSelection] = useState<Selection>(null);
@@ -279,7 +283,7 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
   }
 
   function handleSync() {
-    const { flow: synced, summary } = syncFlowWithStages(flow!, stages, (formId) => getForm(formId)?.name);
+    const { flow: synced, summary } = syncFlowWithStages(flow!, stages, domainPackId!, (formId) => getForm(formId)?.name);
     updateFlow(flow!.id, () => synced);
     setSyncSummary(summary);
     setShowValidation(false);
@@ -446,7 +450,8 @@ function FlowCanvasInner({ flowId }: { flowId: string }) {
             {selectedNode && (
               <FlowNodeInspector
                 node={selectedNode}
-                domainPackId={flow.domainPackId}
+                domainPackId={domainPackId!}
+                projectId={flow.projectId}
                 roles={roles}
                 onChange={(patch) => updateFlow(flow.id, (prev) => ({ ...prev, nodes: prev.nodes.map((n) => (n.id === selectedNode.id ? { ...n, ...patch } : n)) }))}
                 onDelete={() => deleteNode(selectedNode.id)}

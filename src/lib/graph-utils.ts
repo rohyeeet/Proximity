@@ -179,6 +179,9 @@ export function validateFlow(
         });
       }
     }
+    if (node.nodeType === "payment_step" && !node.milestoneTemplateId) {
+      warnings.push({ id: nextId(), severity: "warning", message: `"${node.label}" isn't wired to a milestone template yet.`, nodeId: node.id });
+    }
   }
 
   const backEdgeIds = findBackEdges(nodes, validEdges);

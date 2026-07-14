@@ -23,7 +23,10 @@ export type PaymentAgreementStatus = "draft" | "active" | "completed";
 export interface PaymentAgreement {
   id: string;
   organizationId: string;
+  /** The real project this deal funds. */
+  projectId: string;
   buyerName: string;
+  /** Free-text display fallback predating projectId — never re-derived from it. */
   projectName: string;
   currency: string;
   totalValue: number;
@@ -38,6 +41,10 @@ export interface PaymentAgreement {
 export interface SplitRule {
   id: string;
   paymentAgreementId: string;
+  /** Set when this split belongs to one specific milestone (snapshotted from a MilestoneTemplate's
+   * splits) rather than the whole agreement — lets different milestones pay different roles
+   * different percentages. Undefined = agreement-wide split (the original model). */
+  milestoneId?: string;
   participantRole: ParticipantRole;
   percent: number;
 }
@@ -45,6 +52,8 @@ export interface SplitRule {
 export interface Milestone {
   id: string;
   paymentAgreementId: string;
+  /** Which MilestoneTemplate this was snapshotted from, if any. */
+  sourceTemplateId?: string;
   type: MilestoneType;
   label: string;
   percentOfTotal: number;
@@ -52,6 +61,28 @@ export interface Milestone {
   registryRef?: string;
   order: number;
   status: MilestoneStatus;
+}
+
+/** A reusable milestone definition authored once per project in the Payments section — the one
+ * lever a project developer configures. A flow's payment_step node references one by id; a real
+ * PaymentAgreement's Milestone/SplitRule rows are snapshotted from the selected template(s) at
+ * agreement-creation time. */
+export interface MilestoneTemplate {
+  id: string;
+  projectId: string;
+  type: MilestoneType;
+  label: string;
+  percentOfTotal: number;
+  verificationSource: VerificationSource;
+  order: number;
+  splitRules: MilestoneTemplateSplit[];
+}
+
+export interface MilestoneTemplateSplit {
+  id: string;
+  milestoneTemplateId: string;
+  participantRole: ParticipantRole;
+  percent: number;
 }
 
 export interface MilestoneClaim {

@@ -1,4 +1,4 @@
-import { PlayCircle, FileText, GitBranch, CheckCircle2, RotateCcw, Zap, GitFork, Clock, FileSignature, Flag, type LucideIcon } from "lucide-react";
+import { PlayCircle, FileText, GitBranch, CheckCircle2, RotateCcw, Zap, GitFork, Clock, FileSignature, Flag, Banknote, type LucideIcon } from "lucide-react";
 import type { FlowNodeType } from "@/types";
 
 export interface FlowNodeMeta {
@@ -86,6 +86,14 @@ export const flowNodeCatalog: FlowNodeMeta[] = [
     description: "An auto-generated report or certificate, usually right before a milestone. Example: a Certificate of Analysis generated once Lab COA is approved.",
   },
   {
+    type: "payment_step",
+    label: "Payment step",
+    icon: Banknote,
+    className: "border-good-text/50 bg-good-bg",
+    paletteHint: "Releases a milestone payment",
+    description: "Wires the flow to one of the project's milestone templates and its live escrow ledger. Example: \"Achievement payout\", releasing 40% of the deal once a Production Batch form is approved. The % and who-gets-paid split are set once in Payments — not here.",
+  },
+  {
     type: "milestone",
     label: "Milestone",
     icon: Flag,
@@ -105,11 +113,12 @@ export const suggestedNextTypes: Record<FlowNodeType, FlowNodeType[]> = {
   start: ["form_step"],
   form_step: ["review_gate", "branch", "automation", "form_step"],
   branch: ["form_step", "review_gate", "automation"],
-  review_gate: ["correction_loop", "document", "form_step", "milestone"],
+  review_gate: ["correction_loop", "document", "payment_step", "form_step", "milestone"],
   correction_loop: ["form_step"],
   automation: ["form_step", "document", "milestone"],
   parallel_group: ["form_step"],
   wait: ["form_step", "automation"],
-  document: ["milestone", "form_step"],
+  document: ["payment_step", "milestone", "form_step"],
+  payment_step: ["milestone"],
   milestone: [],
 };

@@ -3,14 +3,14 @@ import { prisma } from "@/lib/db";
 import { requirePaymentOpsAccess } from "@/lib/authz";
 import { appendAuditEntry } from "@/lib/payment-audit";
 import { notifyPayoutPaid } from "@/lib/notifications";
-import { routePayout } from "@/lib/proximity-pay";
+import { proximityPayPSP } from "@/lib/proximity-pay";
 import type { ParticipantRole } from "@/types";
 
-/** Releases a "ready" payout instruction through the simulated PSP. Routes and settles in one
- * request (see src/lib/proximity-pay.ts's module comment on why this is synchronous rather than a
- * real async job) — the audit trail still records routing and settlement as two distinct events,
- * matching §17's "settlement confirmation, not initiation, marks paid" principle even though both
- * happen in the same call here. */
+/** Releases a "ready" payout instruction through the simulated PSP (see src/lib/proximity-pay.ts's
+ * PaymentServiceProvider interface). Routes and settles in one request (see that module's comment
+ * on why this is synchronous rather than a real async job) — the audit trail still records routing
+ * and settlement as two distinct events, matching §17's "settlement confirmation, not initiation,
+ * marks paid" principle even though both happen in the same call here. */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const access = await requirePaymentOpsAccess();
@@ -23,8 +23,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const agreement = await prisma.paymentAgreement.findUnique({ where: { id: instruction.milestone.paymentAgreementId } });
   if (!agreement) return NextResponse.json({ error: "Agreement not found" }, { status: 404 });
 
-  const route = routePayout(instruction.participantRole as ParticipantRole);
-  const paidAt = new Date();
+  const route = proximityPayPSP.route(instruction.participantRole as ParticipantRole);
+  const settlement = proximityPayPSP.settle(route);
+  const paidAt = settlement.settledAt;
 
   await prisma.$transaction(
     async (tx) => {

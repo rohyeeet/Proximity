@@ -9,10 +9,10 @@ export default async function CollectFormPage({
   searchParams,
 }: {
   params: Promise<{ formId: string }>;
-  searchParams: Promise<{ resubmit?: string }>;
+  searchParams: Promise<{ resubmit?: string; project?: string }>;
 }) {
   const { formId } = await params;
-  const { resubmit } = await searchParams;
+  const { resubmit, project: projectId } = await searchParams;
   const authSession = await auth();
   const userId = authSession?.user?.id;
 
@@ -49,6 +49,7 @@ export default async function CollectFormPage({
       initialAnswers={initialAnswers}
       initialEvidence={initialEvidence}
       resubmitSubmissionId={resubmitSubmissionId}
+      projectId={projectId}
     />
   );
 }

@@ -56,6 +56,9 @@ export interface Submission {
   id: string;
   displayId: string;
   formTemplateId: string;
+  /** Which project's flow this was collected under — undefined for legacy rows that predate the
+   * Project entity, or a form filled out before any project's flow referenced it. */
+  projectId?: string;
   formTemplateVersionNo: number;
   flowNodeLabel: string;
   reviewStatus: ReviewStatus;

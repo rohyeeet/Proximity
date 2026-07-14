@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { resolveSession } from "@/lib/session-server";
-import { getAllFlowTemplates, getAllFormTemplates, getAllStages } from "@/lib/queries";
+import { getAllFlowTemplates, getAllFormTemplates, getAllStages, getProjectsByOrganization } from "@/lib/queries";
 import { AppShell } from "@/components/layout/AppShell";
 
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
@@ -20,9 +20,11 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   // render of this layout, so this always reflects whichever org is actually active.
   const activeOrg = accessibleOrgs.find((entry) => entry.organization.id === initialActiveOrganizationId)?.organization ?? accessibleOrgs[0]!.organization;
   const domainPackIds = [activeOrg.domainPackId];
+  const initialProjects = await getProjectsByOrganization(activeOrg.id);
+  const projectIds = initialProjects.map((p) => p.id);
   const [initialForms, initialFlows, initialStages] = await Promise.all([
     getAllFormTemplates(domainPackIds),
-    getAllFlowTemplates(domainPackIds),
+    getAllFlowTemplates(projectIds),
     getAllStages(domainPackIds),
   ]);
 
@@ -35,6 +37,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
       initialForms={initialForms}
       initialFlows={initialFlows}
       initialStages={initialStages}
+      initialProjects={initialProjects}
     >
       {children}
     </AppShell>

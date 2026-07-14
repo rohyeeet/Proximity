@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import {
   domainPacks,
   organizations,
+  projects,
   users,
   roles,
   orgMemberships,
@@ -85,6 +86,27 @@ async function main() {
     });
   }
   console.log(`✓ ${organizations.length} organizations`);
+
+  for (const project of projects) {
+    await prisma.project.upsert({
+      where: { id: project.id },
+      create: {
+        id: project.id,
+        organizationId: project.organizationId,
+        domainPackId: project.domainPackId,
+        name: project.name,
+        description: project.description,
+        status: project.status,
+        createdAt: new Date(project.createdAt),
+      },
+      update: {
+        name: project.name,
+        description: project.description,
+        status: project.status,
+      },
+    });
+  }
+  console.log(`✓ ${projects.length} projects`);
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   for (const user of users) {
@@ -212,7 +234,7 @@ async function main() {
       where: { id: flow.id },
       create: {
         id: flow.id,
-        domainPackId: flow.domainPackId,
+        projectId: flow.projectId,
         code: flow.code,
         name: flow.name,
         status: flow.status,
@@ -323,6 +345,7 @@ async function main() {
       create: {
         id: agreement.id,
         organizationId: agreement.organizationId,
+        projectId: agreement.projectId,
         buyerName: agreement.buyerName,
         projectName: agreement.projectName,
         currency: agreement.currency,

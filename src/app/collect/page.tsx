@@ -10,7 +10,7 @@ import type { Submission } from "@/types";
 
 export default function CollectHomePage() {
   const { session } = useSession();
-  const { forms, flows, stages } = useStudio();
+  const { forms, flows, stages, projects } = useStudio();
   const [mySubmissions, setMySubmissions] = useState<Submission[] | null>(null);
 
   useEffect(() => {
@@ -20,8 +20,13 @@ export default function CollectHomePage() {
       .catch((error) => console.error("Failed to load my submissions", error));
   }, []);
 
-  const flow = pickActiveFlow(flows, session.organization.domainPackId);
-  const assigned = getAssignedWork(flow, forms, stages, session.role.tier);
+  // A submitter can be assigned work across more than one of the org's projects — gather each
+  // project's active flow separately rather than assuming a single org-wide flow.
+  const orgProjects = projects.filter((p) => p.organizationId === session.organization.id);
+  const assigned = orgProjects.flatMap((project) => {
+    const flow = pickActiveFlow(flows, project.id);
+    return getAssignedWork(flow, forms, stages, session.role.tier, project.id, project.name);
+  });
 
   const needsFixCount = mySubmissions?.filter((s) => s.reviewStatus === "needs_fix").length ?? 0;
   const pendingCount = mySubmissions?.filter((s) => s.reviewStatus === "needs_check").length ?? 0;
@@ -61,10 +66,10 @@ export default function CollectHomePage() {
           </p>
         )}
         <div className="flex flex-col gap-2">
-          {assigned.map(({ form, stage, flowNodeLabel }) => (
+          {assigned.map(({ form, stage, flowNodeLabel, projectId, projectName }) => (
             <Link
-              key={form.id}
-              href={`/collect/forms/${form.id}`}
+              key={`${projectId}-${form.id}`}
+              href={`/collect/forms/${form.id}?project=${projectId}`}
               className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3.5 active:bg-sunken"
             >
               <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
@@ -72,7 +77,10 @@ export default function CollectHomePage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-medium text-ink">{flowNodeLabel}</p>
-                <p className="truncate text-[12px] text-ink-soft">{stage ? stage.name : form.name}</p>
+                <p className="truncate text-[12px] text-ink-soft">
+                  {stage ? stage.name : form.name}
+                  {orgProjects.length > 1 && ` · ${projectName}`}
+                </p>
               </div>
               <ChevronRight className="size-4 shrink-0 text-ink-soft/60" />
             </Link>

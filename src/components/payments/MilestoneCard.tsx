@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { MilestoneStatusChip, PayoutInstructionStatusChip, VerificationStatusChip } from "@/components/ui/StatusChip";
 import { EVIDENCE_SOURCE_TYPE_LABELS, uploadClaimEvidence } from "@/lib/upload-claim-evidence";
-import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { cn, formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { MILESTONE_TYPE_LABELS, PARTICIPANT_ROLE_LABELS, PARTICIPANT_ROLE_CHIP_CLASSES } from "@/lib/payments-labels";
 import type { EvidenceSourceType, PayoutInstruction, PayoutRecipient, StakeholderConsent } from "@/types";
 import type { PaymentMilestoneDetail } from "@/lib/queries";
 
-const MILESTONE_TYPE_LABELS: Record<string, string> = { setup_capex: "Setup / CAPEX", achievement: "Achievement", monitoring_cycle: "Monitoring cycle" };
 const REQUIRED_ROLE_LABELS: Record<string, string> = { investor: "Investor", platform_ops: "Platform ops", registry: "Registry" };
 
 interface Capabilities {
@@ -341,6 +341,18 @@ export function MilestoneCard({
         </div>
         <MilestoneStatusChip status={milestone.status} />
       </CardHeader>
+      {milestone.splitRules.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2.5">
+          {milestone.splitRules.map((rule) => (
+            <span
+              key={rule.id}
+              className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium", PARTICIPANT_ROLE_CHIP_CLASSES[rule.participantRole])}
+            >
+              {PARTICIPANT_ROLE_LABELS[rule.participantRole] ?? rule.participantRole} <span className="tabular">{rule.percent}%</span>
+            </span>
+          ))}
+        </div>
+      )}
       <CardBody className="flex flex-col gap-3">
         {milestone.claims.map((claim) => (
           <div key={claim.id} className="rounded-md border border-border p-3">

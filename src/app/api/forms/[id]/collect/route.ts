@@ -3,9 +3,44 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireFormCollectAccess } from "@/lib/authz";
 import { toSubmission } from "@/lib/mappers";
-import { assertLinksStillAvailable, deriveExclusiveLinkedSubmissionIds, deriveLinkedSubmissionIds, getLatestPublishedVersion, LinkedRecordConflictError } from "@/lib/queries";
+import {
+  assertLinksStillAvailable,
+  deriveExclusiveLinkedSubmissionIds,
+  deriveLinkedSubmissionIds,
+  getFlowTemplatesByProject,
+  getLatestPublishedVersion,
+  getProjectsByOrganization,
+  LinkedRecordConflictError,
+} from "@/lib/queries";
+import { pickActiveFlow } from "@/lib/flow-utils";
 import { genId } from "@/lib/utils";
 import type { FormFieldDefinition } from "@/types";
+
+/** Resolves which project's active flow (if any) references this form, and that flow node's
+ * label — Forms are shared domain-pack-level config, but Flows are project-scoped, so a form can
+ * appear in more than one project's flow. Picks the submitter's own organization's project whose
+ * active flow references it first; if the submitter has no org membership on this domain pack
+ * (e.g. a platform admin submitting directly) or no project's flow references this form yet,
+ * falls back to no project attribution rather than guessing. */
+async function resolveProjectFlowNode(
+  formTemplateId: string,
+  domainPackId: string,
+  userId: string
+): Promise<{ projectId?: string; flowNodeLabel?: string }> {
+  const membership = await prisma.orgMembership.findFirst({
+    where: { userId, status: "active", organization: { domainPackId } },
+  });
+  if (!membership) return {};
+
+  const projects = await getProjectsByOrganization(membership.organizationId);
+  for (const project of projects) {
+    const flows = await getFlowTemplatesByProject(project.id);
+    const flow = pickActiveFlow(flows, project.id);
+    const node = flow?.nodes.find((n) => n.formTemplateId === formTemplateId);
+    if (node) return { projectId: project.id, flowNodeLabel: node.label };
+  }
+  return {};
+}
 
 /** Real field submissions — created from the Collect app, never test data. Only ever submitted
  * against the form's latest *published* version, never an in-progress Studio draft. */
@@ -27,9 +62,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const linkedSubmissionIds = deriveLinkedSubmissionIds(fields, answers);
   const exclusiveLinkedIds = deriveExclusiveLinkedSubmissionIds(fields, answers);
 
-  const flowNode = await prisma.flowTemplate
-    .findMany({ where: { domainPackId: form.domainPackId } })
-    .then((flows) => flows.flatMap((f) => f.nodes as { formTemplateId?: string; label: string }[]).find((n) => n.formTemplateId === id));
+  // Prefer the client's own explicit project context (the Collect home page's assigned-work links
+  // already know exactly which project they came from) over re-deriving it server-side — only
+  // fall back to the heuristic when the client didn't send one (e.g. an older cached page).
+  let projectId: string | undefined;
+  let flowNodeLabel: string | undefined;
+  if (typeof body.projectId === "string" && body.projectId) {
+    const project = await prisma.project.findUnique({ where: { id: body.projectId } });
+    if (project && project.domainPackId === form.domainPackId) {
+      const flows = await getFlowTemplatesByProject(project.id);
+      const flow = pickActiveFlow(flows, project.id);
+      const node = flow?.nodes.find((n) => n.formTemplateId === id);
+      projectId = project.id;
+      flowNodeLabel = node?.label;
+    }
+  }
+  if (!projectId) {
+    const resolved = await resolveProjectFlowNode(id, form.domainPackId, access.userId);
+    projectId = resolved.projectId;
+    flowNodeLabel = resolved.flowNodeLabel;
+  }
 
   const submissionId = genId("submission");
   const now = new Date();
@@ -43,8 +95,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             id: submissionId,
             displayId: `${form.code.slice(0, 8).toUpperCase()}-${submissionId.slice(-6)}`,
             formTemplateId: id,
+            projectId,
             formTemplateVersionNo: version.versionNo,
-            flowNodeLabel: flowNode?.label ?? form.name,
+            flowNodeLabel: flowNodeLabel ?? form.name,
             reviewStatus: "needs_check",
             syncStatus: "synced",
             submittedByUserId: access.userId,

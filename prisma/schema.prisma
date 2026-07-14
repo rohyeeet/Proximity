@@ -34,7 +34,6 @@ model DomainPack {
   organizations Organization[]
   stages        Stage[]
   formTemplates FormTemplate[]
-  flowTemplates FlowTemplate[]
 }
 
 model Organization {
@@ -50,8 +49,34 @@ model Organization {
   roles             Role[]
   memberships       OrgMembership[]
   connectors        Connector[]
+  projects          Project[]
   paymentAgreements PaymentAgreement[]
 
+  @@index([domainPackId])
+}
+
+// A real-world site/deal an organization runs — e.g. one specific biochar facility and its
+// offtake deal. An organization can run several projects. Each project gets its own Flow (the
+// process graph) and its own Payments (milestone templates, agreements, escrow) — but Stages and
+// FormTemplates stay domain-pack-scoped (shared question/methodology library every project on
+// that domain pack draws from), since the underlying MRV questions are standardized by the
+// domain pack's methodology, not project-specific.
+model Project {
+  id             String   @id
+  organizationId String
+  domainPackId   String // inherited from the organization at creation time
+  name           String
+  description    String?
+  status         String // "active" | "archived"
+  createdAt      DateTime @default(now())
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flowTemplates      FlowTemplate[]
+  submissions        Submission[]
+  paymentAgreements  PaymentAgreement[]
+  milestoneTemplates MilestoneTemplate[]
+
+  @@index([organizationId])
   @@index([domainPackId])
 }
 
@@ -165,7 +190,7 @@ model FormTemplateVersion {
 
 model FlowTemplate {
   id           String @id
-  domainPackId String
+  projectId    String
   code         String
   name         String
   status       String // "draft" | "published"
@@ -174,10 +199,10 @@ model FlowTemplate {
   nodes        Json // FlowNodeDefinition[] (sourceStageId tags backbone nodes owned by the sync engine)
   edges        Json // FlowEdgeDefinition[] (auto tags edges owned by the sync engine)
 
-  domainPack DomainPack @relation(fields: [domainPackId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([domainPackId, code])
-  @@index([domainPackId])
+  @@unique([projectId, code])
+  @@index([projectId])
 }
 
 // ---------- Records ----------
@@ -186,6 +211,10 @@ model Submission {
   id                    String   @id
   displayId             String
   formTemplateId        String
+  // Which project's flow this was collected under — nullable since a form can in principle be
+  // filled out before any project links to it, and legacy rows predate this column existing.
+  // Lets Records/Overview attribute a record to one project when an org runs several.
+  projectId             String?
   formTemplateVersionNo Int
   flowNodeLabel         String
   reviewStatus          String
@@ -205,10 +234,12 @@ model Submission {
 
   formTemplate FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
   submittedBy  User         @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
 
   @@index([formTemplateId])
   @@index([submittedByUserId])
   @@index([reviewStatus])
+  @@index([projectId])
 }
 
 // ---------- Connectors & devices ----------
@@ -292,6 +323,9 @@ model Notification {
 model PaymentAgreement {
   id                       String   @id
   organizationId           String
+  // The real project this deal funds — added alongside the pre-existing free-text projectName
+  // (kept as a display fallback for agreements predating this column, never re-derived from it).
+  projectId                String
   buyerName                String
   projectName              String
   currency                 String
@@ -304,6 +338,7 @@ model PaymentAgreement {
   createdAt                DateTime @default(now())
 
   organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   splitRules   SplitRule[]
   milestones   Milestone[]
   parties      PaymentAgreementParty[]
@@ -312,22 +347,67 @@ model PaymentAgreement {
   auditEntries PaymentAuditLogEntry[]
 
   @@index([organizationId])
+  @@index([projectId])
+}
+
+// A reusable milestone definition, authored once per project in the Payments section — the one
+// lever a project developer configures (what % of the total this milestone releases, and how
+// that release splits across platform/developer/farmer_community/investor). A flow's payment_step
+// node references one of these by id; a real PaymentAgreement's Milestone/SplitRule rows are
+// snapshotted from the selected templates at agreement-creation time (same principle as
+// FormTemplateVersion snapshotting fields — a later template edit must never retroactively change
+// a signed agreement's terms).
+model MilestoneTemplate {
+  id                 String @id
+  projectId          String
+  type               String // "setup_capex" | "achievement" | "monitoring_cycle"
+  label              String
+  percentOfTotal     Float
+  verificationSource String
+  order              Int
+
+  project    Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  splitRules MilestoneTemplateSplit[]
+
+  @@index([projectId])
+}
+
+model MilestoneTemplateSplit {
+  id                  String @id
+  milestoneTemplateId String
+  participantRole     String // "platform" | "developer" | "farmer_community" | "investor"
+  percent             Float
+
+  milestoneTemplate MilestoneTemplate @relation(fields: [milestoneTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneTemplateId])
 }
 
 model SplitRule {
-  id                 String @id
+  id                 String  @id
   paymentAgreementId String
+  // Null = agreement-wide split (the original model, still how pre-template agreements work).
+  // Set = this milestone's own split, snapshotted from its MilestoneTemplate's splits — lets
+  // different milestones on the same agreement pay different roles different percentages, e.g. a
+  // capex milestone paying 100% to the developer vs. a production milestone splitting four ways.
+  milestoneId        String?
   participantRole    String // "platform" | "developer" | "farmer_community" | "investor"
   percent            Float
 
   paymentAgreement PaymentAgreement @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
+  milestone        Milestone?       @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
   @@index([paymentAgreementId])
+  @@index([milestoneId])
 }
 
 model Milestone {
   id                 String  @id
   paymentAgreementId String
+  // Which MilestoneTemplate this was snapshotted from, if any — powers the live ledger rollup
+  // (getMilestoneLedger) that a flow's payment_step node shows. Null for agreements created before
+  // templates existed, or a milestone hand-added without picking a template.
+  sourceTemplateId   String?
   type               String // "setup_capex" | "achievement" | "monitoring_cycle"
   label              String
   percentOfTotal     Float
@@ -339,8 +419,10 @@ model Milestone {
   paymentAgreement   PaymentAgreement    @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
   claims             MilestoneClaim[]
   payoutInstructions PayoutInstruction[]
+  splitRules         SplitRule[]
 
   @@index([paymentAgreementId])
+  @@index([sourceTemplateId])
 }
 
 model MilestoneClaim {

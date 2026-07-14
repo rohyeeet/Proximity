@@ -16,6 +16,7 @@ export function CollectFormClient({
   initialAnswers,
   initialEvidence,
   resubmitSubmissionId,
+  projectId,
 }: {
   formId: string;
   formName: string;
@@ -24,6 +25,9 @@ export function CollectFormClient({
   initialAnswers: Record<string, string>;
   initialEvidence?: EvidenceFile[];
   resubmitSubmissionId?: string;
+  /** Which project's flow this form was reached from — set by the Collect home page's assigned-
+   * work links, since a form can appear in more than one project's flow. */
+  projectId?: string;
 }) {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
@@ -61,7 +65,7 @@ export function CollectFormClient({
       const res = await fetch(url, {
         method: resubmitSubmissionId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: payload, evidence: evidence.filter((e) => usedEvidenceIds.has(e.id)) }),
+        body: JSON.stringify({ answers: payload, evidence: evidence.filter((e) => usedEvidenceIds.has(e.id)), projectId }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);

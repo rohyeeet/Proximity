@@ -73,10 +73,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       if (!willConsent) return;
 
-      const [splitRuleRows, recipientRows] = await Promise.all([
-        tx.splitRule.findMany({ where: { paymentAgreementId: agreement.id } }),
+      // Template-based agreements snapshot a distinct split per milestone (milestoneId set), so a
+      // claim's payout must only ever sum that milestone's own rows — never every milestone's rows
+      // on the agreement. Pre-template agreements never set milestoneId, so those fall back to the
+      // one agreement-wide split they were created with.
+      const [milestoneSplitRuleRows, agreementSplitRuleRows, recipientRows] = await Promise.all([
+        tx.splitRule.findMany({ where: { milestoneId: claim.milestoneId } }),
+        tx.splitRule.findMany({ where: { paymentAgreementId: agreement.id, milestoneId: null } }),
         tx.payoutRecipient.findMany({ where: { paymentAgreementId: agreement.id } }),
       ]);
+      const splitRuleRows = milestoneSplitRuleRows.length > 0 ? milestoneSplitRuleRows : agreementSplitRuleRows;
       const shares = calculateSplit(claim.claimedAmount, splitRuleRows.map(toSplitRule));
       const recipientByRole = new Map(recipientRows.map(toPayoutRecipient).map((r) => [r.role, r]));
 

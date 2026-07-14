@@ -1,7 +1,7 @@
 import { resolveSession } from "@/lib/session-server";
 import { getOrganizationsByIds, getPaymentAgreementsForUser, getPaymentPartiesForUser } from "@/lib/queries";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PaymentsListClient } from "@/components/payments/PaymentsListClient";
+import { PaymentsPageClient } from "@/components/payments/PaymentsPageClient";
 
 export default async function PaymentsPage() {
   const { user } = await resolveSession();
@@ -17,9 +17,9 @@ export default async function PaymentsPage() {
       <PageHeader
         eyebrow="Proximity Pay"
         title="Payments"
-        description="Milestone-gated offtake agreements — claims, consent, and settlement, end to end."
+        description="Define milestone templates once — the one lever that decides what each milestone releases and who gets paid — then run real agreements against them."
       />
-      <PaymentsListClient agreements={agreements} organizationsById={organizationsById} myParties={myParties} isPlatformAdmin={isPlatformAdmin} />
+      <PaymentsPageClient agreements={agreements} organizationsById={organizationsById} myParties={myParties} isPlatformAdmin={isPlatformAdmin} />
     </div>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useContext, useMemo, useRef, useState } from "react";
-import type { FormTemplate, FlowTemplate, Stage } from "@/types";
+import type { FormTemplate, FlowTemplate, Project, Stage } from "@/types";
+
+export { pickActiveFlow } from "./flow-utils";
 
 interface FormEntry {
   data: FormTemplate;
@@ -16,19 +18,6 @@ interface FlowEntry {
 interface StageEntry {
   data: Stage;
   dirty: boolean;
-}
-
-/**
- * The one flow that actually drives real behavior for a domain pack — Collect's assigned-work
- * list and the Overview flow summary both need exactly one answer, but a domain pack can have
- * more than one `FlowTemplate` row (e.g. someone clicked "New flow" to sketch an alternative
- * without ever meaning to replace the real one). Prefers a published flow over a draft, then the
- * highest version number — the flow that's actually been iterated on and shipped, not whichever
- * row a plain `.find()` happens to return first. */
-export function pickActiveFlow(flows: FlowTemplate[], domainPackId: string): FlowTemplate | undefined {
-  return flows
-    .filter((flow) => flow.domainPackId === domainPackId)
-    .sort((a, b) => Number(b.status === "published") - Number(a.status === "published") || b.versionNo - a.versionNo)[0];
 }
 
 function keyBy<T extends { id: string }>(items: T[]): Record<string, { data: T; dirty: boolean }> {
@@ -56,9 +45,13 @@ interface StudioContextValue {
   forms: FormTemplate[];
   flows: FlowTemplate[];
   stages: Stage[];
+  projects: Project[];
   getForm: (id: string) => FormTemplate | undefined;
   getFlow: (id: string) => FlowTemplate | undefined;
   getStage: (id: string) => Stage | undefined;
+  getProject: (id: string) => Project | undefined;
+  createProject: (organizationId: string, domainPackId: string, name: string) => Promise<string>;
+  updateProject: (id: string, patch: { name?: string; description?: string }) => void;
   isFormDirty: (id: string) => boolean;
   isFlowDirty: (id: string) => boolean;
   isStageDirty: (id: string) => boolean;
@@ -68,7 +61,7 @@ interface StudioContextValue {
   publishForm: (id: string) => Promise<void>;
   publishFlow: (id: string) => Promise<void>;
   createForm: (domainPackId: string) => Promise<string>;
-  createFlow: (domainPackId: string) => Promise<string>;
+  createFlow: (projectId: string) => Promise<string>;
   createStage: (domainPackId: string) => Promise<string>;
   deleteStage: (id: string) => Promise<void>;
   createFormInStage: (stageId: string) => Promise<string>;
@@ -86,16 +79,19 @@ export function StudioProvider({
   initialForms,
   initialFlows,
   initialStages,
+  initialProjects,
   children,
 }: {
   initialForms: FormTemplate[];
   initialFlows: FlowTemplate[];
   initialStages: Stage[];
+  initialProjects: Project[];
   children: React.ReactNode;
 }) {
   const [forms, setForms] = useState<Record<string, FormEntry>>(() => keyBy(initialForms));
   const [flows, setFlows] = useState<Record<string, FlowEntry>>(() => keyBy(initialFlows));
   const [stages, setStages] = useState<Record<string, StageEntry>>(() => keyBy(initialStages));
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [formOrder, setFormOrder] = useState<string[]>(() => initialForms.map((f) => f.id));
   const [flowOrder, setFlowOrder] = useState<string[]>(() => initialFlows.map((f) => f.id));
   const [stageOrder, setStageOrder] = useState<string[]>(() => initialStages.map((s) => s.id));
@@ -132,6 +128,24 @@ export function StudioProvider({
     }
     function getStage(id: string) {
       return stages[id]?.data;
+    }
+    function getProject(id: string) {
+      return projects.find((p) => p.id === id);
+    }
+
+    async function createProject(organizationId: string, domainPackId: string, name: string): Promise<string> {
+      const project = await postJson<Project>(`/api/projects`, { organizationId, domainPackId, name });
+      setProjects((prev) => [...prev, project]);
+      return project.id;
+    }
+
+    function updateProject(id: string, patch: { name?: string; description?: string }) {
+      setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+      scheduleSave(`project:${id}`, () => {
+        patchJson<Project>(`/api/projects/${id}`, patch)
+          .then((saved) => setProjects((prev) => prev.map((p) => (p.id === id ? saved : p))))
+          .catch((error) => console.error("Failed to save project", id, error));
+      });
     }
 
     function saveForm(id: string, data: FormTemplate) {
@@ -226,8 +240,8 @@ export function StudioProvider({
       setFormOrder((prev) => [...prev, form.id]);
       return form.id;
     }
-    async function createFlow(domainPackId: string): Promise<string> {
-      const flow = await postJson<FlowTemplate>(`/api/flows`, { domainPackId });
+    async function createFlow(projectId: string): Promise<string> {
+      const flow = await postJson<FlowTemplate>(`/api/flows`, { projectId });
       setFlows((prev) => ({ ...prev, [flow.id]: { data: flow, dirty: false } }));
       setFlowOrder((prev) => [...prev, flow.id]);
       return flow.id;
@@ -296,9 +310,13 @@ export function StudioProvider({
       forms: formOrder.map((id) => forms[id]?.data).filter((f): f is FormTemplate => Boolean(f)),
       flows: flowOrder.map((id) => flows[id]?.data).filter((f): f is FlowTemplate => Boolean(f)),
       stages: stageOrder.map((id) => stages[id]?.data).filter((s): s is Stage => Boolean(s)),
+      projects,
       getForm,
       getFlow,
       getStage,
+      getProject,
+      createProject,
+      updateProject,
       isFormDirty: (id) => forms[id]?.dirty ?? false,
       isFlowDirty: (id) => flows[id]?.dirty ?? false,
       isStageDirty: (id) => stages[id]?.dirty ?? false,
@@ -317,7 +335,7 @@ export function StudioProvider({
       removeFormFromStage,
       moveFormInStage,
     };
-  }, [forms, flows, stages, formOrder, flowOrder, stageOrder]);
+  }, [forms, flows, stages, projects, formOrder, flowOrder, stageOrder]);
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }

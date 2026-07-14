@@ -1,26 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { fieldInputClass } from "@/lib/form-fields";
 import { cn } from "@/lib/utils";
-import type { MilestoneType, Organization, ParticipantRole, VerificationSource, VerificationStatus } from "@/types";
-
-interface MilestoneDraft {
-  type: MilestoneType;
-  label: string;
-  percentOfTotal: string;
-  verificationSource: VerificationSource;
-  registryRef: string;
-}
-
-interface SplitDraft {
-  participantRole: ParticipantRole;
-  percent: string;
-}
+import { MILESTONE_TYPE_LABELS, PARTICIPANT_ROLE_LABELS, PARTICIPANT_ROLE_CHIP_CLASSES, VERIFICATION_SOURCE_LABELS } from "@/lib/payments-labels";
+import type { MilestoneTemplate, Organization, Project, VerificationStatus } from "@/types";
 
 interface RecipientDraft {
   name: string;
@@ -28,119 +16,107 @@ interface RecipientDraft {
   bavStatus: VerificationStatus;
 }
 
-const MILESTONE_TYPE_LABELS: Record<MilestoneType, string> = {
-  setup_capex: "Setup / CAPEX",
-  achievement: "Achievement",
-  monitoring_cycle: "Monitoring cycle",
-};
-
-const VERIFICATION_SOURCE_LABELS: Record<VerificationSource, string> = {
-  site_inspection: "Site inspection",
-  gis_satellite: "GIS / satellite",
-  ops_data_review: "Ops data review",
-  registry_api: "Registry API",
-  vvb_attestation_upload: "VVB attestation upload",
-  registry_portal_confirmation: "Registry portal confirmation",
-};
-
-const PARTICIPANT_ROLE_LABELS: Record<ParticipantRole, string> = {
-  platform: "Platform",
-  developer: "Developer",
-  farmer_community: "Farmer / community",
-  investor: "Investor",
-};
-
 const VERIFICATION_STATUS_OPTIONS: VerificationStatus[] = ["not_started", "in_review", "approved", "rejected"];
 
-const DEFAULT_MILESTONES: MilestoneDraft[] = [
-  { type: "setup_capex", label: "Plant commissioned", percentOfTotal: "20", verificationSource: "site_inspection", registryRef: "" },
-  { type: "achievement", label: "First 1,000t produced and applied", percentOfTotal: "30", verificationSource: "ops_data_review", registryRef: "" },
-  { type: "monitoring_cycle", label: "Registry issues credits", percentOfTotal: "50", verificationSource: "registry_portal_confirmation", registryRef: "" },
-];
-
-const DEFAULT_SPLITS: SplitDraft[] = [
-  { participantRole: "platform", percent: "8" },
-  { participantRole: "developer", percent: "60" },
-  { participantRole: "farmer_community", percent: "27" },
-  { participantRole: "investor", percent: "5" },
-];
-
-function sumPercent(items: { percentOfTotal?: string; percent?: string }[]): number {
-  return items.reduce((sum, item) => sum + (Number.parseFloat(item.percentOfTotal ?? item.percent ?? "") || 0), 0);
-}
-
-export function PaymentAgreementBuilderClient({ organizations }: { organizations: Organization[] }) {
+/** Milestones and their revenue splits are no longer hand-typed here — they're authored once, in
+ * Payments' "Milestone templates" tab, per project. This builder only ever picks which of that
+ * project's templates apply to this specific agreement; the API snapshots the selected templates'
+ * percentages into real Milestone/SplitRule rows at creation time. */
+export function PaymentAgreementBuilderClient({
+  organizations,
+  projectsByOrg,
+}: {
+  organizations: Organization[];
+  projectsByOrg: Record<string, Project[]>;
+}) {
   const router = useRouter();
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const orgProjects = projectsByOrg[organizationId] ?? [];
+  const [projectId, setProjectId] = useState(orgProjects[0]?.id ?? "");
+
+  const [templates, setTemplates] = useState<MilestoneTemplate[] | null>(null);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
+
   const [buyerName, setBuyerName] = useState("");
-  const [projectName, setProjectName] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [totalValue, setTotalValue] = useState("");
   const [pricePerCredit, setPricePerCredit] = useState("");
   const [escrowInterestAllocation, setEscrowInterestAllocation] = useState("pool");
   const [fxRateTimingPolicy, setFxRateTimingPolicy] = useState("apply_at_execution");
-  const [milestones, setMilestones] = useState<MilestoneDraft[]>(DEFAULT_MILESTONES);
-  const [splitRules, setSplitRules] = useState<SplitDraft[]>(DEFAULT_SPLITS);
   const [developerRecipient, setDeveloperRecipient] = useState<RecipientDraft>({ name: "", kycStatus: "approved", bavStatus: "approved" });
   const [farmerRecipient, setFarmerRecipient] = useState<RecipientDraft>({ name: "", kycStatus: "approved", bavStatus: "approved" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const milestonePercentTotal = useMemo(() => sumPercent(milestones), [milestones]);
-  const splitPercentTotal = useMemo(() => sumPercent(splitRules), [splitRules]);
-  const milestonesValid = Math.abs(milestonePercentTotal - 100) < 0.5;
-  const splitsValid = Math.abs(splitPercentTotal - 100) < 0.5;
+  // Changing org resets the project pick to that org's first project.
+  useEffect(() => {
+    setProjectId((projectsByOrg[organizationId] ?? [])[0]?.id ?? "");
+  }, [organizationId, projectsByOrg]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setTemplates(null);
+      return;
+    }
+    let cancelled = false;
+    setTemplates(null);
+    setSelectedTemplateIds(new Set());
+    fetch(`/api/projects/${projectId}/milestone-templates`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Request failed: ${res.status}`))))
+      .then((data: MilestoneTemplate[]) => {
+        if (cancelled) return;
+        setTemplates(data);
+        setSelectedTemplateIds(new Set(data.map((t) => t.id))); // default: include every template
+      })
+      .catch((err) => {
+        console.error("Failed to load milestone templates", err);
+        if (!cancelled) setTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  function toggleTemplate(id: string) {
+    setSelectedTemplateIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedTemplates = useMemo(() => (templates ?? []).filter((t) => selectedTemplateIds.has(t.id)), [templates, selectedTemplateIds]);
+  const selectedPercentTotal = useMemo(() => selectedTemplates.reduce((sum, t) => sum + t.percentOfTotal, 0), [selectedTemplates]);
+
   const canSubmit =
     !submitting &&
     organizationId !== "" &&
+    projectId !== "" &&
     buyerName.trim() !== "" &&
-    projectName.trim() !== "" &&
     Number(totalValue) > 0 &&
-    milestonesValid &&
-    splitsValid &&
-    milestones.every((m) => m.label.trim() !== "");
-
-  function updateMilestone(index: number, patch: Partial<MilestoneDraft>) {
-    setMilestones((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
-  }
-
-  function addMilestone() {
-    setMilestones((prev) => [...prev, { type: "achievement", label: "", percentOfTotal: "0", verificationSource: "ops_data_review", registryRef: "" }]);
-  }
-
-  function removeMilestone(index: number) {
-    setMilestones((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function updateSplit(index: number, percent: string) {
-    setSplitRules((prev) => prev.map((s, i) => (i === index ? { ...s, percent } : s)));
-  }
+    selectedTemplateIds.size > 0;
 
   async function submit() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
+      const project = orgProjects.find((p) => p.id === projectId);
       const res = await fetch("/api/payments/agreements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organizationId,
+          projectId,
           buyerName,
-          projectName,
+          projectName: project?.name ?? "",
           currency,
           totalValue: Number(totalValue),
           pricePerCredit: pricePerCredit ? Number(pricePerCredit) : undefined,
           escrowInterestAllocation,
           fxRateTimingPolicy,
-          milestones: milestones.map((m) => ({
-            type: m.type,
-            label: m.label,
-            percentOfTotal: Number.parseFloat(m.percentOfTotal) || 0,
-            verificationSource: m.verificationSource,
-            registryRef: m.type === "monitoring_cycle" && m.registryRef.trim() !== "" ? m.registryRef.trim() : undefined,
-          })),
-          splitRules: splitRules.map((s) => ({ participantRole: s.participantRole, percent: Number.parseFloat(s.percent) || 0 })),
+          milestoneTemplateIds: [...selectedTemplateIds],
           recipients: [
             ...(developerRecipient.name.trim() ? [{ role: "developer", ...developerRecipient }] : []),
             ...(farmerRecipient.name.trim() ? [{ role: "farmer_community", ...farmerRecipient }] : []),
@@ -177,12 +153,22 @@ export function PaymentAgreementBuilderClient({ organizations }: { organizations
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-[12px] font-medium text-ink-soft">Buyer name</label>
-            <input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Meridian Foods" className={fieldInputClass} />
+            <label className="mb-1 block text-[12px] font-medium text-ink-soft">Project</label>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={fieldInputClass} disabled={orgProjects.length === 0}>
+              {orgProjects.length === 0 ? (
+                <option value="">No projects for this organization</option>
+              ) : (
+                orgProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
           <div>
-            <label className="mb-1 block text-[12px] font-medium text-ink-soft">Project name</label>
-            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Kaveri Biochar Coop" className={fieldInputClass} />
+            <label className="mb-1 block text-[12px] font-medium text-ink-soft">Buyer name</label>
+            <input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Meridian Foods" className={fieldInputClass} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div>
@@ -218,80 +204,56 @@ export function PaymentAgreementBuilderClient({ organizations }: { organizations
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-ink">Milestone schedule</h2>
-          <span className={cn("text-[12px] font-medium", milestonesValid ? "text-good-text" : "text-critical-text")}>{milestonePercentTotal}% of 100%</span>
+          <h2 className="text-sm font-semibold text-ink">Milestone templates</h2>
+          <span className={cn("text-[12px] font-medium", Math.abs(selectedPercentTotal - 100) < 0.5 ? "text-good-text" : "text-ink-soft")}>
+            {selectedPercentTotal}% of 100% selected
+          </span>
         </CardHeader>
-        <CardBody className="flex flex-col gap-3">
-          {milestones.map((milestone, index) => (
-            <div key={index} className="rounded-md border border-border p-3">
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_1fr_100px_1fr_auto]">
-                <select value={milestone.type} onChange={(e) => updateMilestone(index, { type: e.target.value as MilestoneType })} className={fieldInputClass}>
-                  {Object.entries(MILESTONE_TYPE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={milestone.label}
-                  onChange={(e) => updateMilestone(index, { label: e.target.value })}
-                  placeholder="Milestone label"
-                  className={fieldInputClass}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={milestone.percentOfTotal}
-                  onChange={(e) => updateMilestone(index, { percentOfTotal: e.target.value })}
-                  className={fieldInputClass}
-                />
-                <select
-                  value={milestone.verificationSource}
-                  onChange={(e) => updateMilestone(index, { verificationSource: e.target.value as VerificationSource })}
-                  className={fieldInputClass}
+        <CardBody className="flex flex-col gap-2.5">
+          {!projectId ? (
+            <p className="text-[13px] text-ink-soft">Pick a project to see its milestone templates.</p>
+          ) : templates === null ? (
+            <p className="text-[13px] text-ink-soft">Loading…</p>
+          ) : templates.length === 0 ? (
+            <EmptyState
+              title="This project has no milestone templates yet"
+              description="Define them first in Payments → Milestone templates, then come back here to build the agreement."
+            />
+          ) : (
+            templates.map((template) => {
+              const checked = selectedTemplateIds.has(template.id);
+              return (
+                <label
+                  key={template.id}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-md border p-3",
+                    checked ? "border-brand-500/50 bg-brand-50" : "border-border"
+                  )}
                 >
-                  {Object.entries(VERIFICATION_SOURCE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <Button variant="ghost" size="sm" onClick={() => removeMilestone(index)} disabled={milestones.length <= 1}>
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-              {milestone.type === "monitoring_cycle" && (
-                <input
-                  value={milestone.registryRef}
-                  onChange={(e) => updateMilestone(index, { registryRef: e.target.value })}
-                  placeholder="Registry reference (e.g. Puro.earth)"
-                  className={cn(fieldInputClass, "mt-2.5")}
-                />
-              )}
-            </div>
-          ))}
-          <Button variant="secondary" size="sm" onClick={addMilestone} className="self-start">
-            <Plus className="size-3.5" /> Add milestone
-          </Button>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-ink">Revenue split rule set</h2>
-          <span className={cn("text-[12px] font-medium", splitsValid ? "text-good-text" : "text-critical-text")}>{splitPercentTotal}% of 100%</span>
-        </CardHeader>
-        <CardBody className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {splitRules.map((rule, index) => (
-            <div key={rule.participantRole}>
-              <label className="mb-1 block text-[12px] font-medium text-ink-soft">{PARTICIPANT_ROLE_LABELS[rule.participantRole]}</label>
-              <div className="flex items-center gap-1">
-                <input type="number" min={0} max={100} value={rule.percent} onChange={(e) => updateSplit(index, e.target.value)} className={fieldInputClass} />
-                <span className="text-[13px] text-ink-soft">%</span>
-              </div>
-            </div>
-          ))}
+                  <input type="checkbox" checked={checked} onChange={() => toggleTemplate(template.id)} className="mt-1 size-3.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13.5px] font-medium text-ink">{template.label}</p>
+                      <span className="tabular shrink-0 text-[13px] font-semibold text-ink">{template.percentOfTotal}%</span>
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-ink-soft">
+                      {MILESTONE_TYPE_LABELS[template.type]} · {VERIFICATION_SOURCE_LABELS[template.verificationSource]}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {template.splitRules.map((rule) => (
+                        <span
+                          key={rule.id}
+                          className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium", PARTICIPANT_ROLE_CHIP_CLASSES[rule.participantRole])}
+                        >
+                          {PARTICIPANT_ROLE_LABELS[rule.participantRole]} <span className="tabular">{rule.percent}%</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </label>
+              );
+            })
+          )}
         </CardBody>
       </Card>
 

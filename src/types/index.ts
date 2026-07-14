@@ -1,5 +1,6 @@
 export * from "./identity";
 export * from "./domain-pack";
+export * from "./projects";
 export * from "./forms";
 export * from "./stages";
 export * from "./flows";

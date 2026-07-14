@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { resolveSession } from "@/lib/session-server";
 import { getOrganizationsByIds, getPaymentAccessForUser, getPaymentAgreementDetail } from "@/lib/queries";
-import { canSubmitClaim } from "@/lib/permissions";
+import { canSubmitClaim, resolveLedgerViewerRole } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaymentAgreementDetailClient } from "@/components/payments/PaymentAgreementDetailClient";
 
@@ -25,6 +25,7 @@ export default async function PaymentAgreementDetailPage({ params }: { params: P
     canActAsRegistry: isPlatformAdmin || access.partyRoles.includes("registry"),
     canFileClaim: isPlatformAdmin || (access.isOrgMember && !!access.orgTier && canSubmitClaim(access.orgTier)),
   };
+  const viewerRole = resolveLedgerViewerRole({ isPlatformAdmin, orgTier: access.orgTier, partyRoles: access.partyRoles });
 
   return (
     <div>
@@ -33,7 +34,7 @@ export default async function PaymentAgreementDetailPage({ params }: { params: P
         title={`${detail.agreement.buyerName} × ${detail.agreement.projectName}`}
         description={`${detail.organizationName} · milestone-gated offtake agreement`}
       />
-      <PaymentAgreementDetailClient detail={detail} currentUserId={user.id} capabilities={capabilities} />
+      <PaymentAgreementDetailClient detail={detail} currentUserId={user.id} capabilities={capabilities} viewerRole={viewerRole} />
     </div>
   );
 }

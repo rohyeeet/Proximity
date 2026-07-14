@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireStudioEditAccess } from "@/lib/authz";
+import { requireProjectEditAccess } from "@/lib/authz";
 import { toFlowTemplate } from "@/lib/mappers";
 import { genId } from "@/lib/utils";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const domainPackId = typeof body.domainPackId === "string" ? body.domainPackId : undefined;
-  if (!domainPackId) return NextResponse.json({ error: "domainPackId is required" }, { status: 400 });
+  const projectId = typeof body.projectId === "string" ? body.projectId : undefined;
+  if (!projectId) return NextResponse.json({ error: "projectId is required" }, { status: 400 });
 
-  const access = await requireStudioEditAccess(domainPackId);
+  const access = await requireProjectEditAccess(projectId);
   if (!access.ok) return NextResponse.json({ error: access.message }, { status: access.status });
 
   const id = genId("flow-custom");
   const flow = await prisma.flowTemplate.create({
     data: {
       id,
-      domainPackId,
+      projectId,
       code: id.replace(/-/g, "_"),
       name: "Untitled flow",
       status: "draft",

@@ -56,6 +56,33 @@ export interface RouteResult {
   reference: string;
 }
 
+export interface PaymentQuote {
+  provider: string;
+  /** Always 0 here — no real PSP fee schedule is modeled. A real provider would return its actual cut. */
+  feeAmount: number;
+  estimatedSettlementSeconds: number;
+}
+
+export interface SettlementConfirmation {
+  reference: string;
+  settledAt: Date;
+}
+
+/**
+ * The seam a real PSP (Stripe, Razorpay, a banking-rail partner, ...) would implement in place of
+ * `SimulatedPSP` — every escrow/disbursement flow in this app goes through this interface, not a
+ * bespoke call per participant role, so swapping in a real provider later is a one-class change.
+ * §15 (routing), §17 (settlement confirmation).
+ */
+export interface PaymentServiceProvider {
+  /** What it would cost/how long it would take to pay this role — checked before routing. */
+  quote(participantRole: ParticipantRole, amount: number, currency: string): PaymentQuote;
+  /** Picks a corridor/provider + reference for this payout. */
+  route(participantRole: ParticipantRole): RouteResult;
+  /** Confirms a routed payout actually settled — the moment §17 calls "paid", not "initiated". */
+  settle(route: RouteResult): SettlementConfirmation;
+}
+
 const CORRIDORS: Record<ParticipantRole, string[]> = {
   platform: ["Proximity Pay · Internal Ledger"],
   investor: ["Proximity Pay · Internal Ledger"],
@@ -63,14 +90,29 @@ const CORRIDORS: Record<ParticipantRole, string[]> = {
   farmer_community: ["Proximity Pay · UPI", "Proximity Pay · Mobile Money"],
 };
 
-/** Picks a plausible fake corridor + reference — stands in for §15's weighted PSP-routing engine,
- * simplified to one simulated provider rather than a real multi-candidate scoring model. */
-export function routePayout(participantRole: ParticipantRole): RouteResult {
-  const options = CORRIDORS[participantRole];
-  const provider = options[Math.floor(Math.random() * options.length)] ?? "Proximity Pay";
-  const referenceSuffix = genId("ref").split("-")[1] ?? Date.now().toString(36);
-  return { provider, reference: `PXP-${referenceSuffix.toUpperCase()}` };
+/** No real money ever moves: quote is free/instant, routing picks a plausible fake corridor +
+ * reference (stands in for §15's weighted PSP-routing engine, simplified to one simulated provider
+ * rather than a real multi-candidate scoring model), and settlement confirms immediately. */
+class SimulatedPaymentServiceProvider implements PaymentServiceProvider {
+  quote(): PaymentQuote {
+    return { provider: "Proximity Pay", feeAmount: 0, estimatedSettlementSeconds: 0 };
+  }
+
+  route(participantRole: ParticipantRole): RouteResult {
+    const options = CORRIDORS[participantRole];
+    const provider = options[Math.floor(Math.random() * options.length)] ?? "Proximity Pay";
+    const referenceSuffix = genId("ref").split("-")[1] ?? Date.now().toString(36);
+    return { provider, reference: `PXP-${referenceSuffix.toUpperCase()}` };
+  }
+
+  settle(route: RouteResult): SettlementConfirmation {
+    return { reference: route.reference, settledAt: new Date() };
+  }
 }
+
+/** The one PSP instance the rest of Payments talks to — swap this for a real provider's
+ * implementation of {@link PaymentServiceProvider} without touching any call site. */
+export const proximityPayPSP: PaymentServiceProvider = new SimulatedPaymentServiceProvider();
 
 export function newEscrowAccount(paymentAgreementId: string, heldAmount: number, currency: string) {
   return {

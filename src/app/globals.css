@@ -26,6 +26,19 @@
   --color-critical-text: #b23a2e;
   --color-hold-bg: #eceee8;
   --color-hold-text: #62655c;
+
+  /* Categorical role palette — one consistent hue per money-split participant (platform / developer
+     / farmer_community / investor), used everywhere a role shows up: chips, chart series, ledger
+     rows. Deliberately distinct from the good/warn/critical status-pair tokens above, which encode
+     state, not identity — a role chip should never be mistaken for a status chip. */
+  --color-role-platform: #6b4fd6;
+  --color-role-platform-bg: #efeafb;
+  --color-role-developer: #2a4cdb;
+  --color-role-developer-bg: #eef1fd;
+  --color-role-farmer: #0f8a7a;
+  --color-role-farmer-bg: #e3f5f2;
+  --color-role-investor: #c2571b;
+  --color-role-investor-bg: #fbeee2;
 }
 
 html {

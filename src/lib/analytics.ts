@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getFlowTemplate, getFormTemplate, getStagesByDomainPack, getSubmissionsByForm } from "@/lib/queries";
+import { getFlowTemplate, getFormTemplate, getProject, getStagesByDomainPack, getSubmissionsByForm } from "@/lib/queries";
 import type {
   AnalyticsCard,
   AnalyticsSeries,
@@ -39,6 +39,23 @@ export async function getAnalyticsCards(organizationId: string): Promise<Analyti
 
   const cards: AnalyticsCard[] = [];
   const decided = submissions.filter((s) => s.reviewStatus !== "draft");
+
+  if (submissions.length > 0) {
+    const now = Date.now();
+    const thisWeek = submissions.filter((s) => now - submittedAt(s.versions) < WEEK_MS).length;
+    const lastWeek = submissions.filter((s) => {
+      const age = now - submittedAt(s.versions);
+      return age >= WEEK_MS && age < WEEK_MS * 2;
+    }).length;
+    const diff = thisWeek - lastWeek;
+    cards.push({
+      key: "submissions_this_week",
+      label: "Submissions this week",
+      value: String(thisWeek),
+      tone: "neutral",
+      delta: { label: diff === 0 ? "flat vs last week" : `${diff > 0 ? "+" : ""}${diff} vs last week`, direction: diff > 0 ? "up" : diff < 0 ? "down" : "flat" },
+    });
+  }
 
   if (decided.length > 0) {
     const approved = decided.filter((s) => s.reviewStatus === "approved").length;
@@ -162,8 +179,10 @@ function aggregate(values: number[], kind: TrackerAggregation): number {
 export async function getFlowSummary(flowId: string, organizationId: string): Promise<FlowSummary | undefined> {
   const flow = await getFlowTemplate(flowId);
   if (!flow) return undefined;
+  const project = await getProject(flow.projectId);
+  if (!project) return undefined;
 
-  const stages = await getStagesByDomainPack(flow.domainPackId);
+  const stages = await getStagesByDomainPack(project.domainPackId);
   const stageByFormTemplateId = new Map<string, string>();
   for (const stage of stages) {
     for (const formTemplateId of stage.formTemplateIds) stageByFormTemplateId.set(formTemplateId, stage.id);

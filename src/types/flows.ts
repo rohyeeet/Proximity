@@ -8,6 +8,7 @@ export type FlowNodeType =
   | "parallel_group"
   | "wait"
   | "document"
+  | "payment_step"
   | "milestone";
 
 export type TrackerAggregation = "sum" | "avg" | "min" | "max";
@@ -33,6 +34,10 @@ export interface FlowNodeDefinition {
   /** Set only on nodes owned by the stage-sync engine — one per (stage, form) pair. */
   sourceStageId?: string;
   tracker?: FlowNodeTracker;
+  /** Set only on "payment_step" nodes — which of the project's MilestoneTemplates this step
+   * releases money against. The % and role split are never edited here (Payments is the single
+   * source of truth); this just wires the flow to the milestone and its live ledger. */
+  milestoneTemplateId?: string;
 }
 
 export type FlowConditionOperator = "equals" | "not_equals" | "greater_than" | "less_than";
@@ -59,7 +64,7 @@ export type FlowRunStatus = "not_started" | "in_progress" | "blocked" | "complet
 
 export interface FlowTemplate {
   id: string;
-  domainPackId: string;
+  projectId: string;
   code: string;
   name: string;
   status: "draft" | "published";

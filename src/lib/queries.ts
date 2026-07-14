@@ -22,6 +22,7 @@ import {
   toPaymentAuditLogEntry,
   toPayoutInstruction,
   toPayoutRecipient,
+  toProject,
   toRole,
   toSplitRule,
   toStage,
@@ -29,6 +30,7 @@ import {
   toSubmission,
   toTelemetryStream,
   toUser,
+  toMilestoneTemplate,
   type FormCounts,
 } from "@/lib/mappers";
 import type {
@@ -45,13 +47,16 @@ import type {
   LinkFilter,
   Milestone,
   MilestoneClaim,
+  MilestoneTemplate,
   Organization,
+  ParticipantRole,
   PaymentAgreement,
   PaymentAgreementParty,
   PaymentAuditLogEntry,
   PaymentPartyRole,
   PayoutInstruction,
   PayoutRecipient,
+  Project,
   Role,
   RoleTier,
   SplitRule,
@@ -252,8 +257,8 @@ export async function getAllFormTemplates(domainPackIds: string[]): Promise<Form
   return results;
 }
 
-export async function getFlowTemplatesByDomainPack(domainPackId: string): Promise<FlowTemplate[]> {
-  const rows = await prisma.flowTemplate.findMany({ where: { domainPackId } });
+export async function getFlowTemplatesByProject(projectId: string): Promise<FlowTemplate[]> {
+  const rows = await prisma.flowTemplate.findMany({ where: { projectId } });
   return rows.map(toFlowTemplate);
 }
 
@@ -262,10 +267,20 @@ export async function getFlowTemplate(id: string): Promise<FlowTemplate | undefi
   return row ? toFlowTemplate(row) : undefined;
 }
 
-/** Every flow template across the caller's own accessible domain packs — see getAllFormTemplates. */
-export async function getAllFlowTemplates(domainPackIds: string[]): Promise<FlowTemplate[]> {
-  const rows = await prisma.flowTemplate.findMany({ where: { domainPackId: { in: domainPackIds } } });
+/** Every flow template across the caller's own accessible projects — see getAllFormTemplates. */
+export async function getAllFlowTemplates(projectIds: string[]): Promise<FlowTemplate[]> {
+  const rows = await prisma.flowTemplate.findMany({ where: { projectId: { in: projectIds } } });
   return rows.map(toFlowTemplate);
+}
+
+export async function getProject(id: string): Promise<Project | undefined> {
+  const row = await prisma.project.findUnique({ where: { id } });
+  return row ? toProject(row) : undefined;
+}
+
+export async function getProjectsByOrganization(organizationId: string): Promise<Project[]> {
+  const rows = await prisma.project.findMany({ where: { organizationId }, orderBy: { createdAt: "asc" } });
+  return rows.map(toProject);
 }
 
 /**
@@ -447,6 +462,95 @@ export async function getPaymentAgreement(id: string): Promise<PaymentAgreement 
   return row ? toPaymentAgreement(row) : undefined;
 }
 
+/** A project's own milestone templates — the one place a project developer defines what %
+ * of the total a milestone releases and how it splits across roles, authored once and then
+ * referenced (never re-typed) by a flow's payment_step node and by every real agreement created
+ * for this project. */
+export async function getMilestoneTemplatesByProject(projectId: string): Promise<MilestoneTemplate[]> {
+  const rows = await prisma.milestoneTemplate.findMany({
+    where: { projectId },
+    include: { splitRules: true },
+    orderBy: { order: "asc" },
+  });
+  return rows.map(toMilestoneTemplate);
+}
+
+export async function getMilestoneTemplate(id: string): Promise<MilestoneTemplate | undefined> {
+  const row = await prisma.milestoneTemplate.findUnique({ where: { id }, include: { splitRules: true } });
+  return row ? toMilestoneTemplate(row) : undefined;
+}
+
+export interface MilestoneLedgerRoleShare {
+  participantRole: ParticipantRole;
+  percent: number;
+  /** This role's share of the milestone's total deal-value allocation, across every real agreement running this template. */
+  allocated: number;
+  /** Actually paid out (payoutInstruction.status === "paid"). */
+  disbursed: number;
+  /** allocated - disbursed, floored at 0 — still notionally held in escrow for this role on this milestone. */
+  pending: number;
+}
+
+export interface MilestoneLedger {
+  milestoneTemplateId: string;
+  label: string;
+  percentOfTotal: number;
+  currency: string;
+  /** How many real agreements have snapshotted this template into a live Milestone. */
+  agreementCount: number;
+  totalAllocated: number;
+  totalDisbursed: number;
+  totalPending: number;
+  roles: MilestoneLedgerRoleShare[];
+}
+
+/** Live rollup — asynchronously "open the milestone and check the ledger": how much of a milestone
+ * template's allocation is escrowed vs. actually disbursed, per role, computed fresh from every
+ * real agreement/milestone/payout-instruction that snapshotted this template. Never hand-entered. */
+export async function getMilestoneLedger(milestoneTemplateId: string): Promise<MilestoneLedger | undefined> {
+  const template = await prisma.milestoneTemplate.findUnique({ where: { id: milestoneTemplateId }, include: { splitRules: true } });
+  if (!template) return undefined;
+
+  const milestones = await prisma.milestone.findMany({
+    where: { sourceTemplateId: milestoneTemplateId },
+    include: { paymentAgreement: true, payoutInstructions: true },
+  });
+
+  const currency = milestones[0]?.paymentAgreement.currency ?? "USD";
+  const roles = template.splitRules.map((rule) => {
+    let allocated = 0;
+    let disbursed = 0;
+    for (const milestone of milestones) {
+      const milestoneValue = milestone.paymentAgreement.totalValue * (milestone.percentOfTotal / 100);
+      allocated += milestoneValue * (rule.percent / 100);
+      for (const payout of milestone.payoutInstructions) {
+        if (payout.participantRole === rule.participantRole && payout.status === "paid") disbursed += payout.amount;
+      }
+    }
+    allocated = Math.round(allocated * 100) / 100;
+    disbursed = Math.round(disbursed * 100) / 100;
+    return {
+      participantRole: rule.participantRole as ParticipantRole,
+      percent: rule.percent,
+      allocated,
+      disbursed,
+      pending: Math.max(0, Math.round((allocated - disbursed) * 100) / 100),
+    };
+  });
+
+  return {
+    milestoneTemplateId,
+    label: template.label,
+    percentOfTotal: template.percentOfTotal,
+    currency,
+    agreementCount: new Set(milestones.map((m) => m.paymentAgreementId)).size,
+    totalAllocated: Math.round(roles.reduce((sum, r) => sum + r.allocated, 0) * 100) / 100,
+    totalDisbursed: Math.round(roles.reduce((sum, r) => sum + r.disbursed, 0) * 100) / 100,
+    totalPending: Math.round(roles.reduce((sum, r) => sum + r.pending, 0) * 100) / 100,
+    roles,
+  };
+}
+
 /** The current user's own party rows across every agreement — powers the "your investments" /
  * "your registry queue" summary above the agreement list. */
 export async function getPaymentPartiesForUser(userId: string): Promise<PaymentAgreementParty[]> {
@@ -488,6 +592,7 @@ export async function getPaymentAccessForUser(
 export interface PaymentMilestoneDetail extends Milestone {
   claims: (MilestoneClaim & { evidence: EvidenceAttachment[]; consents: StakeholderConsent[] })[];
   payoutInstructions: (PayoutInstruction & { recipient?: PayoutRecipient; overrides: GateOverride[] })[];
+  splitRules: SplitRule[];
 }
 
 export interface PaymentAgreementDetail {
@@ -516,6 +621,7 @@ export async function getPaymentAgreementDetail(id: string): Promise<PaymentAgre
         include: {
           claims: { orderBy: { submittedAt: "desc" }, include: { evidence: true, consents: true } },
           payoutInstructions: { include: { recipient: true, overrides: { orderBy: { createdAt: "desc" } } } },
+          splitRules: true,
         },
       },
       parties: true,
@@ -545,7 +651,10 @@ export async function getPaymentAgreementDetail(id: string): Promise<PaymentAgre
   return {
     agreement: toPaymentAgreement(row),
     organizationName: row.organization.name,
-    splitRules: row.splitRules.map(toSplitRule),
+    // Agreement-wide only (milestoneId null) — how pre-template agreements were created. Each
+    // milestone's own split (from a MilestoneTemplate) is on PaymentMilestoneDetail.splitRules
+    // instead, since different milestones can now pay different roles different percentages.
+    splitRules: row.splitRules.filter((r) => r.milestoneId === null).map(toSplitRule),
     milestones: row.milestones.map((m) => ({
       ...toMilestone(m),
       claims: m.claims.map((c) => ({
@@ -558,6 +667,7 @@ export async function getPaymentAgreementDetail(id: string): Promise<PaymentAgre
         recipient: pi.recipient ? toPayoutRecipient(pi.recipient) : undefined,
         overrides: pi.overrides.map(toGateOverride),
       })),
+      splitRules: m.splitRules.map(toSplitRule),
     })),
     parties: row.parties.map(toPaymentAgreementParty),
     recipients: row.recipients.map(toPayoutRecipient),

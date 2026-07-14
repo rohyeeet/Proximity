@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Trash2, X } from "lucide-react";
 import { EntityPicker } from "./EntityPicker";
 import { FieldPicker } from "./FieldPicker";
 import { InfoHint } from "./knowledge/InfoHint";
+import { PaymentStepLedgerPanel } from "@/components/payments/PaymentStepLedgerPanel";
 import { flowNodeMetaByType, suggestedNextTypes } from "./flow-node-catalog";
 import { useStudio } from "@/lib/studio";
-import type { FlowNodeDefinition, FlowNodeType, Role, RoleTier, TrackerAggregation } from "@/types";
+import { MILESTONE_TYPE_LABELS, VERIFICATION_SOURCE_LABELS } from "@/lib/payments-labels";
+import type { FlowNodeDefinition, FlowNodeType, MilestoneTemplate, Role, RoleTier, TrackerAggregation } from "@/types";
 
 const roleTierOptions: RoleTier[] = ["submitter", "reviewer", "org_admin", "org_sub_admin", "designer", "viewer"];
 
@@ -16,6 +18,7 @@ const trackerAggregationLabels: Record<TrackerAggregation, string> = { sum: "SUM
 export function FlowNodeInspector({
   node,
   domainPackId,
+  projectId,
   roles,
   onChange,
   onDelete,
@@ -23,6 +26,8 @@ export function FlowNodeInspector({
 }: {
   node: FlowNodeDefinition;
   domainPackId: string;
+  /** Needed only for "payment_step" nodes — scopes the milestone-template picker to this flow's own project. */
+  projectId: string;
   /** The current organization's real roles — used to show job-title labels ("Field Surveyor")
    * instead of raw tier codes in the "Assigned role tier" select below. */
   roles: Role[];
@@ -36,6 +41,25 @@ export function FlowNodeInspector({
   const supportsFormLink = node.nodeType === "form_step" || node.nodeType === "automation" || node.nodeType === "document";
   const roleNameByTier = new Map(roles.map((r) => [r.tier, r.name]));
 
+  const [milestoneTemplates, setMilestoneTemplates] = useState<MilestoneTemplate[] | null>(null);
+  useEffect(() => {
+    if (node.nodeType !== "payment_step") return;
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/milestone-templates`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Request failed"))))
+      .then((data: MilestoneTemplate[]) => {
+        if (!cancelled) setMilestoneTemplates(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load milestone templates", err);
+        if (!cancelled) setMilestoneTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [node.nodeType, projectId]);
+  const selectedTemplate = milestoneTemplates?.find((t) => t.id === node.milestoneTemplateId);
+
   // Self-heals a node's label to its linked form's real name whenever the label is still the
   // generic node-type default (or blank) — covers both a freshly-linked form and an older node
   // that was never renamed, without touching a label someone has deliberately customized.
@@ -45,6 +69,14 @@ export function FlowNodeInspector({
     if (isGenericLabel && node.label !== linkedForm.name) onChange({ label: linkedForm.name });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, node.formTemplateId, linkedForm?.name]);
+
+  // Same self-heal, for a payment_step node's linked milestone template.
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    const isGenericLabel = node.label.trim() === "" || node.label === flowNodeMetaByType[node.nodeType].label;
+    if (isGenericLabel && node.label !== selectedTemplate.label) onChange({ label: selectedTemplate.label });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, node.milestoneTemplateId, selectedTemplate?.label]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -161,6 +193,47 @@ export function FlowNodeInspector({
               <p className="text-[11.5px] text-ink-soft">This form has no numeric fields to track yet.</p>
             )}
           </div>
+        </div>
+      )}
+
+      {node.nodeType === "payment_step" && (
+        <div>
+          <label className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
+            Milestone template
+            <InfoHint topicId="flow-node-types" />
+          </label>
+          <p className="mb-1.5 text-[11.5px] leading-snug text-ink-soft">
+            Which of this project&apos;s milestones this step releases. The % and who-gets-paid split are set once in Payments — not here.
+          </p>
+          {milestoneTemplates === null ? (
+            <p className="text-[12px] text-ink-soft">Loading…</p>
+          ) : milestoneTemplates.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border bg-sunken px-2.5 py-2 text-[12px] text-ink-soft">
+              This project has no milestone templates yet — define them in Payments → Milestone templates first.
+            </p>
+          ) : (
+            <select
+              value={node.milestoneTemplateId ?? ""}
+              onChange={(e) => onChange({ milestoneTemplateId: e.target.value || undefined })}
+              className="w-full rounded-md border border-border-strong bg-paper px-2.5 py-1.5 text-[13.5px] text-ink"
+            >
+              <option value="">Not wired to a milestone yet</option>
+              {milestoneTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.label} ({template.percentOfTotal}%)
+                </option>
+              ))}
+            </select>
+          )}
+
+          {selectedTemplate && (
+            <div className="mt-2 flex flex-col gap-2 rounded-md border border-border-strong bg-paper p-2.5">
+              <p className="text-[12px] text-ink-soft">
+                {MILESTONE_TYPE_LABELS[selectedTemplate.type]} · {VERIFICATION_SOURCE_LABELS[selectedTemplate.verificationSource]}
+              </p>
+              <PaymentStepLedgerPanel milestoneTemplateId={selectedTemplate.id} />
+            </div>
+          )}
         </div>
       )}
 

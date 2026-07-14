@@ -143,23 +143,33 @@ DomainPack ("Biochar — Isometric & Puro", "Green Hydrogen — Electrolysis to 
    ├── Organization (a tenant running that domain's process — e.g. "Varaha South")
    │      ├── Role (tiered permission sets, some org-wide, some scoped to a project cluster)
    │      ├── OrgMembership (a User ⇄ Role binding, per org)
-   │      └── Connector (a registered data source, org-scoped) ── Device ── TelemetryStream
+   │      ├── Connector (a registered data source, org-scoped) ── Device ── TelemetryStream
+   │      │
+   │      └── Project (one real-world site or deal — "Isometric Biochar, Site 1" — an org runs
+   │             several; each gets its own Flow and its own Payments, drawing on the shared
+   │             Stage/FormTemplate library below)
+   │             ├── FlowTemplate (the visual graph tying Stages/Forms/reviews/payments together)
+   │             │      └── FlowNodeDefinition[] / FlowEdgeDefinition[] — kept in sync with
+   │             │           Stages by the sync engine (src/lib/flow-sync.ts), hand-editable
+   │             │           beyond that backbone; a "payment_step" node references one
+   │             │           MilestoneTemplate below
+   │             ├── MilestoneTemplate (this project's own reusable milestone definitions —
+   │             │      see Payments below)
+   │             ├── PaymentAgreement[] (see Payments below)
+   │             └── Submission[] (a project's own, for cross-project attribution in Records)
    │
    ├── Stage (an ordered step in the process — "Feedstock Intake", "Pyrolysis Run", ...)
-   │      └── owns an ordered list of FormTemplate ids and Connector ids
+   │      └── owns an ordered list of FormTemplate ids and Connector ids — shared across every
+   │           project on this domain pack, since the methodology is standardized, not per-deal
    │
-   ├── FormTemplate (a reusable form definition — "Facility Setup", "Sample Intake COA")
-   │      └── FormTemplateVersion (append-only history: "draft" while being edited,
-   │           "published" and immutable forever once published — never mutated again)
-   │
-   ├── FlowTemplate (the visual graph tying Stages/Forms/reviews/automation together)
-   │      └── FlowNodeDefinition[] / FlowEdgeDefinition[] — kept in sync with Stages by
-   │           the sync engine (src/lib/flow-sync.ts), but hand-editable beyond that backbone
-   │
-   └── Submission (a real record — pinned to the FormTemplateVersion it was submitted under,
-          so answers always render against the fields that existed at submission time,
-          regardless of how many times the form has been republished since)
+   └── FormTemplate (a reusable form definition — "Facility Setup", "Sample Intake COA")
+          └── FormTemplateVersion (append-only history: "draft" while being edited,
+               "published" and immutable forever once published — never mutated again)
 ```
+
+A `Submission` is pinned to the `FormTemplateVersion` it was submitted under, so answers always
+render against the fields that existed at submission time, regardless of how many times the form
+has been republished since.
 
 **Why versions matter**: publishing a form doesn't overwrite anything. The current draft flips to
 `published` and becomes permanent history; the next edit opens a brand-new draft row. A submission
@@ -168,14 +178,21 @@ banner when a submission's pinned version is stale relative to the form's curren
 `Notification` rows are fanned out to every past (non-test) submitter plus the publisher whenever a
 form changes.
 
-Payments (see [below](#payments-proximity-pay)) hangs its own tree off `Organization`, parallel to
-the MRV domain above, sharing only `Organization`/`User`:
+Payments (see [below](#payments-proximity-pay)) hangs off each `Project`, not the `Organization`
+directly — an org running several projects gets a separate payment structure per project:
 
 ```
-Organization
+Project
+   ├── MilestoneTemplate (authored once, per project — % of the deal + who-gets-paid split;
+   │      the single lever every real agreement and every flow's payment_step draws from)
+   │      └── MilestoneTemplateSplit (per-role % — platform / developer / farmer_community / investor)
    │
-   └── PaymentAgreement (buyer, project org, milestone schedule, split rule set)
-          ├── Milestone (typed: setup_capex | achievement | monitoring_cycle)
+   └── PaymentAgreement (buyer, real total value, references this project)
+          ├── Milestone (typed: setup_capex | achievement | monitoring_cycle; snapshotted from a
+          │      MilestoneTemplate at agreement-creation time — sourceTemplateId records which —
+          │      so a later template edit never retroactively changes a signed agreement)
+          │      ├── SplitRule (this milestone's own snapshotted split — different milestones on
+          │      │      the same agreement can pay different roles different percentages)
           │      ├── MilestoneClaim (a ground partner's claimed amount + evidence)
           │      │      ├── EvidenceAttachment
           │      │      └── StakeholderConsent (one per required role: investor / platform_ops / registry)
@@ -216,19 +233,42 @@ junction table instead (checked independently of the tier table above). Their se
 carries a minimal `viewer`-tier `OrgMembership`, purely so the existing session/org-switcher plumbing
 works unchanged for them — that membership grants them nothing on its own.
 
+**What each Payments viewer actually sees is role-scoped, not just action-gated.** `org_admin`/
+`org_sub_admin` (and platform) get the full agreement detail — terms, the per-milestone revenue
+split, escrow internals — plus the project's Milestone templates and Ledger tabs (deal-structuring
+config). Every other viewer — an investor/registry party, a ground partner filing claims, or any
+other org member — sees a `PaymentLedgerSummary` instead: just their own allocation, disbursed-to-
+date, and pending, never another participant's split percentage or identity, and the Milestone
+templates/Ledger tabs aren't shown to them at all (`src/lib/permissions.ts`'s
+`resolveLedgerViewerRole`, enforced both in the UI and in the underlying API routes).
+
 ## Features
 
 ### Overview
 The landing dashboard — current flow health, what's blocked, and where to look next, computed live
 from the org's own submissions:
-- **Flow summary table** — one row per form referenced by the active flow, with an
-  **approved/pending/rejected** breakdown, **approval rate**, **average SLA** (time from submission
-  to first approval), and the **top rejection reason(s)** pulled from real review-action history.
+- **Metric cards** with a real week-over-week **delta caption** (e.g. "+12 vs last week"), computed
+  from the same submission timestamps as the card's headline number, never a placeholder trend.
+- **Flow summary** — a compact vertical **stage tracker** (status dot + pending/return-rate per
+  stage, in sequence) alongside the existing per-form table: **approved/pending/rejected** breakdown,
+  **approval rate**, **average SLA** (time from submission to first approval), and the **top
+  rejection reason(s)** pulled from real review-action history.
 - **Bottleneck and drop-off callouts** — which stage currently has the most submissions waiting
   (the process bottleneck) and which stage has the highest return-for-correction rate (where the
   process is losing the most work), rolled up from the form-level numbers above.
 - **Tracker column** — see "Tracker" under Flow Studio below; any node's live metric surfaces here
   automatically once configured.
+- A **project switcher** when an org runs more than one — Overview, Records, and Collect all scope
+  to the selected project's own flow.
+
+### Projects
+Each real-world site or deal an organization runs — its own Flow and its own Payments, drawing on
+the org's shared Stage/FormTemplate library (the question set is standardized by methodology and
+reused across every project; only sequencing and money are project-specific). The Projects page
+lists an org's projects with inline rename and one-click links into that project's Flow and
+Payments; "New project" creates one against the org's domain pack. Every flow, submission, and
+payment agreement now belongs to exactly one project (`Project.id`), not just an organization —
+an org with two active deals never mixes their flows, records, or milestone schedules.
 
 ### Studio
 - **Stage board** — ordered stages, each owning a set of forms and connectors; reorder, rename
@@ -241,14 +281,20 @@ from the org's own submissions:
     `Submission` (never appears in Records or production counts) so a form can be validated before
     it's published.
 - **Flow Studio** — a `@xyflow/react` canvas for the process graph: form steps, branches, review
-  gates, correction loops, automations, parallel groups, waits, documents, explicit `start` and
-  `milestone` (terminal) nodes. Bigger nodes and connection handles, a collapsible module palette,
-  **contextual "suggested next step" buttons** in the node inspector (e.g. a review gate suggests
-  a correction loop, a document, or a milestone), a **fullscreen mode** for building large graphs,
-  auto-arrange (layered topological layout), and structural validation (dangling edges, unmarked
-  cycles, unreachable nodes, missing start/milestone nodes, branches with fewer than two paths).
-  "Sync from stages" reconciles the flow's backbone with the current Stage list without discarding
-  hand-built detours like review gates.
+  gates, correction loops, automations, parallel groups, waits, documents, a **payment step**, and
+  explicit `start` and `milestone` (terminal) nodes. Bigger nodes and connection handles, a
+  collapsible module palette, **contextual "suggested next step" buttons** in the node inspector
+  (e.g. a review gate suggests a correction loop, a document, or a payment step), a **fullscreen
+  mode** for building large graphs, auto-arrange (layered topological layout), and structural
+  validation (dangling edges, unmarked cycles, unreachable nodes, missing start/milestone nodes,
+  branches with fewer than two paths, a payment step not yet wired to a milestone). "Sync from
+  stages" reconciles the flow's backbone with the current Stage list without discarding hand-built
+  detours like review gates.
+  - **Payment step** — wires the flow to one of the project's `MilestoneTemplate`s (picked from a
+    dropdown; the % and who-gets-paid split are set once in Payments, never re-typed here) and
+    shows that milestone's **live ledger** inline — allocated/disbursed/pending per role, computed
+    fresh from every real agreement running that template. This is "asynchronously open the
+    milestone and check the ledger" from inside the flow itself.
   - **Tracker** — any form-linked node can define a live operational metric: pick one of that
     form's numeric fields and an aggregation (**SUM / AVG / MIN / MAX**, a dropdown) to roll up
     across that form's submissions — e.g. average facility capacity, total tonnage processed.
@@ -324,12 +370,21 @@ implements Phase 1 of a full payments-infrastructure design (see
 root) end to end, live against Postgres, with every dollar amount, KYC/BAV status, and payout
 reference real data — just never a real bank transfer.
 
+**The one lever, authored before any real deal exists:** on the Payments screen's **Milestone
+templates** tab, an org editor defines a project's milestones once — any mix of **Setup/CAPEX**,
+**Achievement**, and **Monitoring-cycle** types, each a % of the total deal value (must sum to 100
+across the project) with its own revenue-split rule set (platform / developer / farmer-community /
+investor percentages, also summing to 100). Nothing about a real buyer or dollar amount is entered
+here — this is pure deal structure, reusable across every agreement the project ever signs, and
+it's the only thing a flow's **payment step** node can reference.
+
 **The lifecycle, in order:**
-1. A platform admin builds an agreement at `/payments/new` — buyer, project org, total value,
-   milestone schedule (any mix of **Setup/CAPEX**, **Achievement**, and **Monitoring-cycle**
-   milestones), a revenue-split rule set (platform / developer / farmer-community / investor, as
-   percentages that must sum to 100), and the payout recipients' starting KYC/BAV status. Activating
-   the agreement "funds" escrow — Proximity Pay's simulated buyer-collection leg.
+1. A platform admin builds a real agreement at `/payments/new` — buyer, **which project**, total
+   value, and a **checklist of that project's milestone templates** to include (the templates
+   selected must cover 100% of the value); each selected template is **snapshotted** into a real
+   `Milestone` + its own `SplitRule` set at that moment, so a later edit to the template never
+   retroactively changes this agreement's terms. Activating the agreement "funds" escrow —
+   Proximity Pay's simulated buyer-collection leg.
 2. A ground partner (the project org's own staff) opens the agreement and **submits a claim** on a
    milestone — a claimed amount plus evidence (a photo, a production log, a registry export, ...),
    the same construction-loan-draw-request pattern as a real financing workflow: the party doing the
@@ -353,20 +408,38 @@ reference real data — just never a real bank transfer.
    **hash-chained, append-only audit log**, one chain per agreement; a "Verify chain" button
    recomputes every entry's hash live and confirms nothing in the sequence has been altered.
 
-**Where each persona actually reaches it:** platform admin and any non-submitter-tier org staff use
-the full `/payments` screen in the main app shell; submitter-tier ground partners (who are otherwise
-routed to the mobile Collect app, not the admin shell) reach the identical flow at
-`/collect/payments`; investor and registry are new personas with no `OrgMembership`-based access at
-all — a dedicated `PaymentAgreementParty` table grants them visibility into exactly the agreements
-they're a party to, regardless of organization.
+**The ledger — checked live, not hand-entered:** opening a milestone (from its flow's payment step,
+or the Payments screen's **Ledger** tab, one row per milestone template) shows a rollup computed
+fresh from every real agreement running that template: how much is allocated to each role, how much
+has actually been disbursed, and how much is still pending — the "how much is in escrow from
+investors, how much to developers, how much to farmers" picture, live. No stored/cached percentage,
+recomputed from `Milestone`/`PayoutInstruction` rows on every read.
+
+**Where each persona actually reaches it, and what they see:** platform admin and org management
+(`org_admin`/`org_sub_admin`) use the full `/payments` screen in the main app shell — Milestone
+templates, Ledger, and Agreements, with the complete agreement-terms/split/escrow detail on each
+one. Submitter-tier ground partners (who are otherwise routed to the mobile Collect app, not the
+admin shell) reach the identical claim-filing flow at `/collect/payments`. Investor and registry are
+new personas with no `OrgMembership`-based access at all — a dedicated `PaymentAgreementParty` table
+grants them visibility into exactly the agreements they're a party to, regardless of organization.
+Neither ground partners nor investor/registry parties (nor any other non-management org member) ever
+see the Milestone templates/Ledger tabs, or another participant's split % or identity on an
+agreement — they get a simple, role-scoped payment summary instead (their own allocation/disbursed/
+pending; escrow-held/interest-accrued for an investor), enforced both in the UI and in the
+underlying API routes, not just hidden by a missing button.
 
 **What's real vs. simulated:** the milestone/claim/consent/gate state machine, the revenue-split
 math, the escrow ledger (interest computed live from a core-portion accrual formula, never a stale
-stored number), the dual-authorization mechanics, and the audit trail are all real, live-verified
-logic against Postgres. Only the payment *rail* itself — "Proximity Pay" — is fake: no card network,
-bank, or registry API is actually called; a payout reference is a generated string, not a real
-transaction id. This mirrors the source design doc's own Phase 1 scope: model the workflow honestly
-first, wire up real PSP/registry integrations later once the workflow itself is proven.
+stored number), the dual-authorization mechanics, the milestone-template snapshot mechanism, and the
+audit trail are all real, live-verified logic against Postgres. Only the payment *rail* itself —
+"Proximity Pay" — is fake, and it's now formalized behind a small `PaymentServiceProvider` interface
+(`quote` / `route` / `settle` in `src/lib/proximity-pay.ts`) so every payout flows through one seam
+per participant role rather than a bespoke call site; `SimulatedPaymentServiceProvider` is the only
+implementation today, deliberately — no card network, bank, or registry API is actually called, and
+a payout reference is a generated string, not a real transaction id. A real provider would implement
+the same interface, so swapping one in later touches one class, not every call site. This mirrors
+the source design doc's own Phase 1 scope: model the workflow honestly first, wire up real
+PSP/registry integrations later once the workflow itself is proven.
 
 ## Usage walkthrough
 
@@ -426,32 +499,50 @@ src/
   app/
     (app)/            authenticated route group — Studio, Records, Payments, Connectors, Analytics, Admin
       layout.tsx       resolves the session + hydrates SessionProvider/StudioProvider server-side
-      payments/        agreement list, builder (super-admin only), role-aware detail screen
+      projects/        project list — inline rename, links into that project's Flow and Payments
+      payments/        milestone templates / ledger / agreement list, builder (super-admin only),
+                       role-aware detail screen
     collect/           mobile-first field-submitter app — assigned forms, fill/submit, my submissions
       payments/        the same Payments flow, reached by submitter-tier users routed here instead
     api/
+      projects/        project CRUD + a project's milestone-templates list/create
+      milestone-templates/  update/delete a template; a template's live ledger rollup
       payments/        agreements/claims/evidence/consents/payout-instructions route handlers
       ...              every mutation re-checks authz independently of the client
     login/             Auth.js Credentials sign-in page
   components/
-    layout/            AppShell, Sidebar, Topbar, NotificationBell
-    studio/            Stage board, Form builder, Flow canvas + inspector + node catalog
+    layout/            AppShell, Sidebar (categorical gradient accent), Topbar, NotificationBell
+    studio/            Stage board, Form builder, Flow canvas + inspector + node catalog (incl.
+                       the payment_step node's milestone-template picker + inline ledger)
     records/           Row-wise validation table, evidence/geo-map cell popovers, per-field flagging
-    payments/          Agreement builder, milestone/claim/consent/payout detail UI, audit trail panel
+    payments/          Milestone-template editor, agreement builder (template checklist, not
+                       freehand), milestone/claim/consent/payout detail UI, role-scoped
+                       PaymentLedgerSummary, per-template ledger panel + tab, audit trail panel
+    overview/          FlowSummaryTable, StageTracker (compact vertical stage pipeline)
     connectors/         Connector creation
     collect/           Collect shell + form client + capture/ (photo, signature, geo, doc-scan)
-    ui/                Shared primitives (Button, Modal, StatusChip, EditableText, ...)
+    ui/                Shared primitives (Button, Modal, StatusChip, EditableText, MetricCard, ...)
   lib/
     db.ts              Prisma client singleton
     auth.ts            Auth.js config
-    authz.ts           Server-side RBAC checks, one per mutation shape (incl. payments' 3 access paths)
-    permissions.ts      Pure tier-membership predicates (canEditStudio, canDeleteStage, canSubmitClaim)
-    studio.tsx         Client Context: optimistic edits + debounced persistence
-    queries.ts / mappers.ts   Read-side Prisma queries and Prisma-row → TS-type mappers
+    authz.ts           Server-side RBAC checks, one per mutation shape (incl. payments' access paths
+                       and requireProjectEditAccess)
+    permissions.ts      Pure tier-membership predicates (canEditStudio, canDeleteStage, canSubmitClaim,
+                       resolveLedgerViewerRole)
+    studio.tsx         Client Context: optimistic edits + debounced persistence (forms/flows/
+                       stages/projects)
+    flow-utils.ts      pickActiveFlow — which of a project's flows is the "real" one (shared by
+                       client Context and server routes)
+    queries.ts / mappers.ts   Read-side Prisma queries and Prisma-row → TS-type mappers (incl.
+                       getMilestoneLedger, the live per-role rollup)
+    payment-ledger-summary.ts  Pure helpers computing one role's own share of an agreement, for the
+                       role-scoped detail view
+    payments-labels.ts  Shared milestone/role/verification-source labels + categorical chip classes
     flow-sync.ts       Reconciles a Flow's backbone with its Stage list
     graph-utils.ts     Layered auto-layout + structural flow validation
     validation-table.ts  Version-aware column model for the Records grid
-    proximity-pay.ts   The simulated PSP: revenue split, KYC/BAV gate check, fake routing, escrow interest
+    proximity-pay.ts   The simulated PSP behind a PaymentServiceProvider interface (quote/route/
+                       settle): revenue split, KYC/BAV gate check, fake routing, escrow interest
     payment-audit.ts   Hash-chained audit log append + verification
     notifications.ts   Fans out Notification rows on form publish / claim consent / payout settlement
   data/                Hand-authored seed/mock content — the single source of truth the
@@ -509,14 +600,16 @@ not a stale snapshot:
 - **The seed script's shared demo password (`demo1234`)** is fine for this seeded dataset but would
   be a real weakness if `prisma/seed.ts` were ever run against a production database as-is.
 - **Payments is Phase 1 of a larger design, by intent** ([full design doc](./CARBON_MARKETS_PAYMENTS_INFRA_DESIGN.md)):
-  "Proximity Pay" never calls a real card network, bank, or registry API — every payout reference,
-  routing corridor, and settlement is a simulation, deliberately, so the claim/consent/gate workflow
-  could be built and proven honestly before any real PSP integration, licensing, or registry-API
-  work begins. Also not yet built: real PSP/mass-payout partner integration, real registry API
-  polling for monitoring-cycle milestones (registry confirmation is a first-party portal action
-  today, which the design doc treats as a legitimate permanent fallback, not just a stopgap),
-  receivables financing (Phase 4 in the source design), and CSV export for the Payments audit trail
-  (Records already has this; Payments doesn't yet).
+  "Proximity Pay" — formalized behind a `PaymentServiceProvider` interface (`quote`/`route`/`settle`
+  in `src/lib/proximity-pay.ts`) so a real provider is a one-class swap later, not a rewrite — never
+  calls a real card network, bank, or registry API today; every payout reference, routing corridor,
+  and settlement is a simulation, deliberately, so the claim/consent/gate workflow could be built and
+  proven honestly before any real PSP integration, licensing, or registry-API work begins. Also not
+  yet built: a real PSP's implementation of that interface, real registry API polling for
+  monitoring-cycle milestones (registry confirmation is a first-party portal action today, which the
+  design doc treats as a legitimate permanent fallback, not just a stopgap), receivables financing
+  (Phase 4 in the source design), and CSV export for the Payments audit trail (Records already has
+  this; Payments doesn't yet).
 - **The two new Payments demo personas (investor, registry) carry a real `OrgMembership`** in
   `org-varaha-south` purely so existing login/session plumbing works for them — their actual access
   comes from `PaymentAgreementParty`, but this means they show up in that org's own Team & Access

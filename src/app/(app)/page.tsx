@@ -10,17 +10,21 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { FlowSummaryTable } from "@/components/overview/FlowSummaryTable";
+import { StageTracker } from "@/components/overview/StageTracker";
 import type { AnalyticsCard, FlowSummary, Submission } from "@/types";
 
 export default function OverviewPage() {
   const { session } = useSession();
-  const { flows } = useStudio();
+  const { flows, projects } = useStudio();
   const orgId = session.organization.id;
   const domainPackId = session.organization.domainPackId;
+  const orgProjects = projects.filter((p) => p.organizationId === orgId);
 
   const [attention, setAttention] = useState<Submission[]>([]);
   const [cards, setCards] = useState<AnalyticsCard[]>([]);
   const [flowSummary, setFlowSummary] = useState<FlowSummary | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
+  const selectedProjectId = activeProjectId ?? orgProjects[0]?.id;
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +52,7 @@ export default function OverviewPage() {
     };
   }, [orgId]);
 
-  const orgFlow = pickActiveFlow(flows, domainPackId);
+  const orgFlow = selectedProjectId ? pickActiveFlow(flows, selectedProjectId) : undefined;
 
   const orgFlowId = orgFlow?.id;
   useEffect(() => {
@@ -86,14 +90,29 @@ export default function OverviewPage() {
       <Card className="mb-6">
         <CardHeader>
           <div>
-            <h2 className="text-sm font-semibold text-ink">Flow summary</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-ink">Flow summary</h2>
+              {orgProjects.length > 1 && (
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => setActiveProjectId(e.target.value)}
+                  className="rounded-md border border-border-strong bg-paper px-2 py-1 text-[12.5px] text-ink"
+                >
+                  {orgProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             {orgFlow ? (
               <p className="mt-0.5 text-[13px] text-ink-soft">
                 <span className="font-medium text-ink">{orgFlow.name}</span> · triggers on {orgFlow.triggerLabel.toLowerCase()} · {orgFlow.nodes.length}{" "}
                 nodes · v{orgFlow.versionNo}
               </p>
             ) : (
-              <p className="mt-0.5 text-[13px] text-ink-soft">No flow published yet for this domain pack.</p>
+              <p className="mt-0.5 text-[13px] text-ink-soft">No flow published yet for this project.</p>
             )}
           </div>
           {orgFlow && (
@@ -105,7 +124,10 @@ export default function OverviewPage() {
         <CardBody>
           {orgFlow ? (
             flowSummary ? (
-              <FlowSummaryTable summary={flowSummary} />
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
+                <StageTracker summary={flowSummary} />
+                <FlowSummaryTable summary={flowSummary} />
+              </div>
             ) : (
               <p className="text-[13px] text-ink-soft">Loading flow summary…</p>
             )

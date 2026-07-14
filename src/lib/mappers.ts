@@ -9,6 +9,7 @@ import type {
   Role as RoleRow,
   DomainPack as DomainPackRow,
   Stage as StageRow,
+  Project as ProjectRow,
   FormTemplate as FormTemplateRow,
   FormTemplateVersion as FormTemplateVersionRow,
   FlowTemplate as FlowTemplateRow,
@@ -20,6 +21,8 @@ import type {
   PaymentAgreement as PaymentAgreementRow,
   SplitRule as SplitRuleRow,
   Milestone as MilestoneRow,
+  MilestoneTemplate as MilestoneTemplateRow,
+  MilestoneTemplateSplit as MilestoneTemplateSplitRow,
   MilestoneClaim as MilestoneClaimRow,
   EvidenceAttachment as EvidenceAttachmentRow,
   StakeholderConsent as StakeholderConsentRow,
@@ -36,6 +39,7 @@ import type {
   Role,
   DomainPack,
   Stage,
+  Project,
   FormTemplate,
   FormFieldDefinition,
   FlowTemplate,
@@ -58,6 +62,8 @@ import type {
   PaymentAgreement,
   SplitRule,
   Milestone,
+  MilestoneTemplate,
+  MilestoneTemplateSplit,
   MilestoneClaim,
   EvidenceAttachment,
   StakeholderConsent,
@@ -134,6 +140,18 @@ export function toStage(row: StageRow): Stage {
   };
 }
 
+export function toProject(row: ProjectRow): Project {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    domainPackId: row.domainPackId,
+    name: row.name,
+    description: row.description ?? undefined,
+    status: row.status as Project["status"],
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export interface FormCounts {
   submissionCount: number;
   needsCheckCount: number;
@@ -163,7 +181,7 @@ export function toFormTemplate(row: FormTemplateRow, version: FormTemplateVersio
 export function toFlowTemplate(row: FlowTemplateRow): FlowTemplate {
   return {
     id: row.id,
-    domainPackId: row.domainPackId,
+    projectId: row.projectId,
     code: row.code,
     name: row.name,
     status: row.status as FlowTemplate["status"],
@@ -179,6 +197,7 @@ export function toSubmission(row: SubmissionRow): Submission {
     id: row.id,
     displayId: row.displayId,
     formTemplateId: row.formTemplateId,
+    projectId: row.projectId ?? undefined,
     formTemplateVersionNo: row.formTemplateVersionNo,
     flowNodeLabel: row.flowNodeLabel,
     reviewStatus: row.reviewStatus as Submission["reviewStatus"],
@@ -239,6 +258,7 @@ export function toPaymentAgreement(row: PaymentAgreementRow): PaymentAgreement {
   return {
     id: row.id,
     organizationId: row.organizationId,
+    projectId: row.projectId,
     buyerName: row.buyerName,
     projectName: row.projectName,
     currency: row.currency,
@@ -256,7 +276,30 @@ export function toSplitRule(row: SplitRuleRow): SplitRule {
   return {
     id: row.id,
     paymentAgreementId: row.paymentAgreementId,
+    milestoneId: row.milestoneId ?? undefined,
     participantRole: row.participantRole as SplitRule["participantRole"],
+    percent: row.percent,
+  };
+}
+
+export function toMilestoneTemplate(row: MilestoneTemplateRow & { splitRules: MilestoneTemplateSplitRow[] }): MilestoneTemplate {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    type: row.type as MilestoneTemplate["type"],
+    label: row.label,
+    percentOfTotal: row.percentOfTotal,
+    verificationSource: row.verificationSource as MilestoneTemplate["verificationSource"],
+    order: row.order,
+    splitRules: row.splitRules.map(toMilestoneTemplateSplit),
+  };
+}
+
+export function toMilestoneTemplateSplit(row: MilestoneTemplateSplitRow): MilestoneTemplateSplit {
+  return {
+    id: row.id,
+    milestoneTemplateId: row.milestoneTemplateId,
+    participantRole: row.participantRole as MilestoneTemplateSplit["participantRole"],
     percent: row.percent,
   };
 }
@@ -265,6 +308,7 @@ export function toMilestone(row: MilestoneRow): Milestone {
   return {
     id: row.id,
     paymentAgreementId: row.paymentAgreementId,
+    sourceTemplateId: row.sourceTemplateId ?? undefined,
     type: row.type as Milestone["type"],
     label: row.label,
     percentOfTotal: row.percentOfTotal,

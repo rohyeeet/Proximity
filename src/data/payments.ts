@@ -30,6 +30,7 @@ export const paymentAgreements: PaymentAgreement[] = [
   {
     id: AGREEMENT_ID,
     organizationId: "org-varaha-south",
+    projectId: "project-default-org-varaha-south",
     buyerName: "Meridian Foods",
     projectName: "Kaveri Biochar Coop",
     currency: "USD",

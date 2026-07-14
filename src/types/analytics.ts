@@ -4,6 +4,9 @@ export interface AnalyticsCard {
   value: string;
   trend?: "up" | "down" | "flat";
   tone?: "good" | "warn" | "critical" | "neutral";
+  /** A real week-over-week (or similarly-scoped) comparison caption, e.g. "+12 this week" —
+   * computed from the same underlying rows as `value`, never a placeholder. */
+  delta?: { label: string; direction: "up" | "down" | "flat" };
 }
 
 export interface AnalyticsSeriesPoint {

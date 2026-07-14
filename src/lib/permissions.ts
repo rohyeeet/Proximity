@@ -1,4 +1,4 @@
-import type { RoleTier } from "@/types";
+import type { PaymentPartyRole, RoleTier } from "@/types";
 
 /**
  * Studio (Stages/Forms/Flows) editing is a platform-, org-admin-, sub-admin-, and designer-tier
@@ -45,4 +45,21 @@ export function canSubmitClaim(tier: RoleTier): boolean {
  * is documented in one place, same as every other permission here. */
 export function canActAsOps(isPlatformAdmin: boolean): boolean {
   return isPlatformAdmin;
+}
+
+/** Which of an agreement's right-hand panel a viewer gets: the full "Agreement terms / Revenue
+ * split / Escrow" breakdown (org management only), or the role-scoped PaymentLedgerSummary — an
+ * investor/registry party, a ground partner filing claims, or any other org member (reviewer,
+ * designer, viewer) who takes part in the agreement but doesn't manage it. Investor/registry party
+ * status takes precedence over org tier since those personas are often not org members at all. */
+export function resolveLedgerViewerRole(params: {
+  isPlatformAdmin: boolean;
+  orgTier?: RoleTier;
+  partyRoles: PaymentPartyRole[];
+}): "manager" | "investor" | "registry" | "developer" | "farmer_community" {
+  if (params.isPlatformAdmin || params.orgTier === "org_admin" || params.orgTier === "org_sub_admin") return "manager";
+  if (params.partyRoles.includes("investor")) return "investor";
+  if (params.partyRoles.includes("registry")) return "registry";
+  if (params.orgTier === "submitter") return "farmer_community";
+  return "developer";
 }

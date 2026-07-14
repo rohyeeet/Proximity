@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireStudioEditAccess } from "@/lib/authz";
+import { requireProjectEditAccess } from "@/lib/authz";
 import { toFlowTemplate } from "@/lib/mappers";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -8,7 +8,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existing = await prisma.flowTemplate.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Flow not found" }, { status: 404 });
 
-  const access = await requireStudioEditAccess(existing.domainPackId);
+  const access = await requireProjectEditAccess(existing.projectId);
   if (!access.ok) return NextResponse.json({ error: access.message }, { status: access.status });
 
   const body = await request.json();

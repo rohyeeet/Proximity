@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutGrid,
+  FolderKanban,
   FileText,
   Workflow,
   Table2,
@@ -23,6 +24,7 @@ import { useSession } from "@/lib/session";
 
 const orgNav = [
   { href: "/", label: "Overview", icon: LayoutGrid },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/forms", label: "Forms", icon: FileText },
   { href: "/flows", label: "Flows", icon: Workflow },
   { href: "/records", label: "Records", icon: Table2 },
@@ -60,7 +62,13 @@ export function Sidebar() {
   }
 
   return (
-    <aside className={cn("flex h-screen shrink-0 flex-col border-r border-border bg-surface transition-[width]", collapsed ? "w-16" : "w-60")}>
+    <aside
+      className={cn("relative flex h-screen shrink-0 flex-col border-r border-border bg-surface transition-[width]", collapsed ? "w-16" : "w-60")}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-brand-500 via-role-farmer to-role-investor"
+      />
       <div className={cn("flex h-14 items-center gap-2 border-b border-border", collapsed ? "justify-center px-2" : "px-5")}>
         <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-500 text-[13px] font-bold text-white">P</div>
         {!collapsed && <span className="min-w-0 flex-1 truncate font-semibold text-ink">Proximity</span>}
