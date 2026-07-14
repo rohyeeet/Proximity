@@ -216,6 +216,7 @@ export const knowledgeBase: KnowledgeTopic[] = [
     body: [
       "This is the flow-side business rule engine hook: instead of a free-text guess like \"carrier route?\", the branch can actually check the value submitted for a specific field, e.g. carrier_type equals ammonia.",
       "Another concrete example: a Branch right after Sampling checks the upstream Sampling form's contamination_flag field — equals true routes to a Reprocessing correction loop, anything else continues on to Lab COA.",
+      "This rule is live, not just documentation: it determines whether the node on the other side of the edge actually shows up as assigned work in Collect. A submitter only sees \"Reprocessing\" once one of their own Sampling submissions actually sets contamination_flag to true — never unconditionally.",
     ],
     relatedTopicIds: ["flow-edge-kinds"],
   },

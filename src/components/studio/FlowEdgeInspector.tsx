@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import { FieldPicker } from "./FieldPicker";
 import { InfoHint } from "./knowledge/InfoHint";
 import { useStudio } from "@/lib/studio";
+import { findUpstreamFormTemplateId } from "@/lib/flow-conditions";
 import type { FlowConditionOperator, FlowEdgeDefinition, FlowTemplate } from "@/types";
 
 const kindOptions: FlowEdgeDefinition["kind"][] = ["sequential", "parallel", "conditional", "correction"];
@@ -13,25 +14,6 @@ const operatorOptions: { value: FlowConditionOperator; label: string }[] = [
   { value: "greater_than", label: "is greater than" },
   { value: "less_than", label: "is less than" },
 ];
-
-/** Walks backward through non-correction edges to find the nearest upstream node with a linked form. */
-function findUpstreamFormTemplateId(flow: FlowTemplate, fromNodeId: string): string | null {
-  const visited = new Set<string>();
-  let frontier = [fromNodeId];
-  while (frontier.length > 0) {
-    const next: string[] = [];
-    for (const nodeId of frontier) {
-      if (visited.has(nodeId)) continue;
-      visited.add(nodeId);
-      const node = flow.nodes.find((n) => n.id === nodeId);
-      if (node?.formTemplateId) return node.formTemplateId;
-      const incoming = flow.edges.filter((edge) => edge.toNodeId === nodeId && edge.kind !== "correction");
-      next.push(...incoming.map((edge) => edge.fromNodeId));
-    }
-    frontier = next;
-  }
-  return null;
-}
 
 export function FlowEdgeInspector({
   flow,

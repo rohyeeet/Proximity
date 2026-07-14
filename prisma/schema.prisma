@@ -70,11 +70,12 @@ model Project {
   status         String // "active" | "archived"
   createdAt      DateTime @default(now())
 
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  flowTemplates      FlowTemplate[]
-  submissions        Submission[]
-  paymentAgreements  PaymentAgreement[]
-  milestoneTemplates MilestoneTemplate[]
+  organization        Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flowTemplates       FlowTemplate[]
+  submissions         Submission[]
+  paymentAgreements   PaymentAgreement[]
+  milestoneTemplates  MilestoneTemplate[]
+  serviceIntegrations ProjectServiceIntegration[]
 
   @@index([organizationId])
   @@index([domainPackId])
@@ -98,10 +99,11 @@ model User {
   state           String?
   district        String?
 
-  memberships             OrgMembership[]
-  submissions             Submission[]            @relation("SubmittedBy")
-  notifications           Notification[]
-  paymentAgreementParties PaymentAgreementParty[]
+  memberships                  OrgMembership[]
+  submissions                  Submission[]                @relation("SubmittedBy")
+  notifications                Notification[]
+  paymentAgreementParties      PaymentAgreementParty[]
+  requestedServiceIntegrations ProjectServiceIntegration[]
 }
 
 model Role {
@@ -564,4 +566,53 @@ model PaymentAuditLogEntry {
   paymentAgreement PaymentAgreement @relation(fields: [paymentAgreementId], references: [id], onDelete: Cascade)
 
   @@index([paymentAgreementId])
+}
+
+// ---------- Marketplace (Science & Data Integrations) ----------
+
+/**
+ * A real-world scientific/verification service a project can connect for a listed cost — soil
+ * carbon modeling, remote sensing, lab analysis, LCA, and so on. Global catalog data (curated, not
+ * per-org), same role as DomainPack: seeded once, referenced everywhere. Deliberately informational
+ * — activation below is simulated, no real API call or billing happens (see README's Prototype
+ * boundaries).
+ */
+model ServiceListing {
+  id           String   @id
+  category     String
+  name         String
+  provider     String
+  description  String
+  pricingModel String // "per_sample" | "per_hectare_month" | "subscription_month" | "per_api_call" | "custom_quote"
+  priceLabel   String
+  apiAvailable Boolean
+  badges       String[]
+  website      String?
+  order        Int
+  createdAt    DateTime @default(now())
+
+  integrations ProjectServiceIntegration[]
+
+  @@index([category])
+}
+
+/**
+ * Which project has connected which service listing — the only mutable, project-scoped state in
+ * the Marketplace. One row per (project, listing); toggling status doesn't delete history.
+ */
+model ProjectServiceIntegration {
+  id                String   @id
+  projectId         String
+  serviceListingId  String
+  status            String // "active" | "disconnected"
+  requestedByUserId String
+  activatedAt       DateTime @default(now())
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  serviceListing ServiceListing @relation(fields: [serviceListingId], references: [id], onDelete: Cascade)
+  requestedBy    User           @relation(fields: [requestedByUserId], references: [id])
+
+  @@unique([projectId, serviceListingId])
+  @@index([projectId])
+  @@index([serviceListingId])
 }

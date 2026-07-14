@@ -25,7 +25,7 @@ export default function CollectHomePage() {
   const orgProjects = projects.filter((p) => p.organizationId === session.organization.id);
   const assigned = orgProjects.flatMap((project) => {
     const flow = pickActiveFlow(flows, project.id);
-    return getAssignedWork(flow, forms, stages, session.role.tier, project.id, project.name);
+    return getAssignedWork(flow, forms, stages, session.role.tier, project.id, project.name, mySubmissions ?? []);
   });
 
   const needsFixCount = mySubmissions?.filter((s) => s.reviewStatus === "needs_fix").length ?? 0;

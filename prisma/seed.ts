@@ -30,6 +30,7 @@ import {
   payoutInstructions,
   escrowAccounts,
   paymentAuditSeedEvents,
+  serviceListings,
 } from "../src/data";
 import { computeHash, GENESIS_HASH } from "../src/lib/payment-audit";
 import { genId } from "../src/lib/utils";
@@ -529,6 +530,37 @@ async function main() {
     }
   }
   console.log(`✓ ${paymentAgreements.length} payment agreement(s) (+ milestones, claims, consents, payouts, escrow, audit trail)`);
+
+  for (const listing of serviceListings) {
+    await prisma.serviceListing.upsert({
+      where: { id: listing.id },
+      create: {
+        id: listing.id,
+        category: listing.category,
+        name: listing.name,
+        provider: listing.provider,
+        description: listing.description,
+        pricingModel: listing.pricingModel,
+        priceLabel: listing.priceLabel,
+        apiAvailable: listing.apiAvailable,
+        badges: listing.badges,
+        website: listing.website,
+        order: listing.order,
+      },
+      update: {
+        name: listing.name,
+        provider: listing.provider,
+        description: listing.description,
+        pricingModel: listing.pricingModel,
+        priceLabel: listing.priceLabel,
+        apiAvailable: listing.apiAvailable,
+        badges: listing.badges,
+        website: listing.website,
+        order: listing.order,
+      },
+    });
+  }
+  console.log(`✓ ${serviceListings.length} marketplace service listings`);
 
   console.log("\nSeed complete. Every mock user can log in with their email + the demo password above.");
 }

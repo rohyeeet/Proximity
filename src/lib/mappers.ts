@@ -32,6 +32,8 @@ import type {
   EscrowAccount as EscrowAccountRow,
   GateOverride as GateOverrideRow,
   PaymentAuditLogEntry as PaymentAuditLogEntryRow,
+  ServiceListing as ServiceListingRow,
+  ProjectServiceIntegration as ProjectServiceIntegrationRow,
 } from "@prisma/client";
 import type {
   Organization,
@@ -73,6 +75,8 @@ import type {
   EscrowAccount,
   GateOverride,
   PaymentAuditLogEntry,
+  ServiceListing,
+  ProjectServiceIntegration,
 } from "@/types";
 
 export function toDomainPack(row: DomainPackRow): DomainPack {
@@ -438,5 +442,32 @@ export function toTelemetryStream(row: TelemetryStreamRow): TelemetryStream {
     latestValue: row.latestValue,
     thresholdHigh: row.thresholdHigh ?? undefined,
     points: row.points as unknown as TelemetryPoint[],
+  };
+}
+
+export function toServiceListing(row: ServiceListingRow): ServiceListing {
+  return {
+    id: row.id,
+    category: row.category as ServiceListing["category"],
+    name: row.name,
+    provider: row.provider,
+    description: row.description,
+    pricingModel: row.pricingModel as ServiceListing["pricingModel"],
+    priceLabel: row.priceLabel,
+    apiAvailable: row.apiAvailable,
+    badges: row.badges,
+    website: row.website ?? undefined,
+    order: row.order,
+  };
+}
+
+export function toProjectServiceIntegration(row: ProjectServiceIntegrationRow): ProjectServiceIntegration {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    serviceListingId: row.serviceListingId,
+    status: row.status as ProjectServiceIntegration["status"],
+    requestedByUserId: row.requestedByUserId,
+    activatedAt: row.activatedAt.toISOString(),
   };
 }

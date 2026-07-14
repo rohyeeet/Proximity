@@ -8,3 +8,4 @@ export * from "./submissions";
 export * from "./connectors";
 export * from "./knowledge-base";
 export * from "./payments";
+export * from "./service-listings";

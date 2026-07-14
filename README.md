@@ -156,6 +156,8 @@ DomainPack ("Biochar — Isometric & Puro", "Green Hydrogen — Electrolysis to 
    │             ├── MilestoneTemplate (this project's own reusable milestone definitions —
    │             │      see Payments below)
    │             ├── PaymentAgreement[] (see Payments below)
+   │             ├── ProjectServiceIntegration[] (which Marketplace listings this project has
+   │             │      connected — see Marketplace below)
    │             └── Submission[] (a project's own, for cross-project attribution in Records)
    │
    ├── Stage (an ordered step in the process — "Feedstock Intake", "Pyrolysis Run", ...)
@@ -166,6 +168,10 @@ DomainPack ("Biochar — Isometric & Puro", "Green Hydrogen — Electrolysis to 
           └── FormTemplateVersion (append-only history: "draft" while being edited,
                "published" and immutable forever once published — never mutated again)
 ```
+
+`ServiceListing` (the Marketplace's catalog — soil carbon modeling, remote sensing, lab analysis,
+LCA, and so on) is global, curated seed data, same role as `DomainPack`: not owned by any one
+`Project`, just referenced by `ProjectServiceIntegration` when a project connects one.
 
 A `Submission` is pinned to the `FormTemplateVersion` it was submitted under, so answers always
 render against the fields that existed at submission time, regardless of how many times the form
@@ -295,6 +301,13 @@ an org with two active deals never mixes their flows, records, or milestone sche
     shows that milestone's **live ledger** inline — allocated/disbursed/pending per role, computed
     fresh from every real agreement running that template. This is "asynchronously open the
     milestone and check the ledger" from inside the flow itself.
+  - **Branch conditions (Rule/BRE)** — a conditional edge can check a real field on the nearest
+    upstream linked form (e.g. `contamination_flag equals true`) instead of a free-text guess, and
+    this rule is genuinely evaluated, not just documented: a node reached only via a conditional
+    edge with a real rule set only shows up as assigned work in Collect once the viewer's own
+    submission on that upstream form actually satisfies it (`src/lib/flow-conditions.ts`,
+    consumed by `getAssignedWork`) — a submitter doesn't see "Reprocessing" unless their own
+    Sampling record actually tripped the flag.
   - **Tracker** — any form-linked node can define a live operational metric: pick one of that
     form's numeric fields and an aggregation (**SUM / AVG / MIN / MAX**, a dropdown) to roll up
     across that form's submissions — e.g. average facility capacity, total tonnage processed.
@@ -306,6 +319,28 @@ an org with two active deals never mixes their flows, records, or milestone sche
 Register internal lookups, external database/REST sources, or industrial-protocol devices
 (OPC-UA / Modbus / MQTT-Sparkplug B) that forms can bind to for live dropdowns or telemetry-fed
 automation. Each connector rolls up its bound `Device`s and their `TelemetryStream`s.
+
+### Marketplace (Science & Data Integrations)
+The "Science" side of the platform's utility, alongside dMRV workflow and Payments: a curated,
+project-scoped catalog (`/marketplace`) of real-world measurement, lab, and verification services a
+project can connect, each with a real provider and a listed cost — distinct from Connectors, which
+is raw device/IoT telemetry ingestion, not paid professional services. Researched against the
+actual dMRV industry (not invented placeholders), the ~20 seeded listings span seven categories:
+
+- **Soil Carbon Modeling** — DNDC (UNH), RothC (Rothamsted Research), SoilGrids API (ISRIC)
+- **Remote Sensing & Biomass Monitoring** — Planetary Variables (Planet Labs), Sentinel Hub Statistical API, NASA GEDI biomass data
+- **Enhanced Weathering & Geochemical Analysis** — Isometric's Enhanced Weathering Protocol, Puro.earth's ERW methodology toolkit, ICP-MS trace-element analysis
+- **Lab Analysis & Material Testing** — IBI biochar certification panels, EBC (European Biochar Certificate) testing, soil health baseline panels
+- **Life Cycle Assessment** — openLCA + ecoinvent, SimaPro, the Climatiq emission-factors API
+- **GHG Flux & Emissions Monitoring** — LI-COR eddy-covariance flux towers, Picarro cavity ring-down analyzers
+- **Registry & Certification APIs** — Puro.earth's Puro Connect APIs, the Verra VCS project data API, Gold Standard Registry Connect
+
+A project picker + category filter + search narrows the catalog (any org member can browse); an
+org-editor tier can **activate** a listing for a project, which persists as a real
+`ProjectServiceIntegration` row (toggle on/off any time). **Deliberately simulated**: activating a
+listing never makes a real API call or produces a real invoice — it records the project's own
+intent/config, the same "model the workflow honestly, wire up the real integration later" principle
+already applied to Proximity Pay.
 
 ### Collect (field submitter app)
 A separate, mobile-first surface (`/collect`) for the `submitter` role — not the Studio chrome, just
@@ -502,12 +537,15 @@ src/
       projects/        project list — inline rename, links into that project's Flow and Payments
       payments/        milestone templates / ledger / agreement list, builder (super-admin only),
                        role-aware detail screen
+      marketplace/     Science & Data Integrations catalog — project-scoped activate/deactivate
     collect/           mobile-first field-submitter app — assigned forms, fill/submit, my submissions
       payments/        the same Payments flow, reached by submitter-tier users routed here instead
     api/
-      projects/        project CRUD + a project's milestone-templates list/create
+      projects/        project CRUD + a project's milestone-templates list/create and
+                       service-integrations list/activate
       milestone-templates/  update/delete a template; a template's live ledger rollup
       payments/        agreements/claims/evidence/consents/payout-instructions route handlers
+      marketplace/     the global service-listings catalog (GET only, not org-sensitive)
       ...              every mutation re-checks authz independently of the client
     login/             Auth.js Credentials sign-in page
   components/
@@ -519,6 +557,7 @@ src/
                        freehand), milestone/claim/consent/payout detail UI, role-scoped
                        PaymentLedgerSummary, per-template ledger panel + tab, audit trail panel
     overview/          FlowSummaryTable, StageTracker (compact vertical stage pipeline)
+    marketplace/       MarketplaceClient — project picker, category filter/search, activate/deactivate
     connectors/         Connector creation
     collect/           Collect shell + form client + capture/ (photo, signature, geo, doc-scan)
     ui/                Shared primitives (Button, Modal, StatusChip, EditableText, MetricCard, ...)
@@ -538,6 +577,9 @@ src/
     payment-ledger-summary.ts  Pure helpers computing one role's own share of an agreement, for the
                        role-scoped detail view
     payments-labels.ts  Shared milestone/role/verification-source labels + categorical chip classes
+    marketplace-labels.ts  Category labels, icons, and pricing-model labels for the Marketplace
+    flow-conditions.ts  evaluateCondition + findUpstreamFormTemplateId — the real (not just
+                       documented) execution behind a conditional edge's Rule (BRE)
     flow-sync.ts       Reconciles a Flow's backbone with its Stage list
     graph-utils.ts     Layered auto-layout + structural flow validation
     validation-table.ts  Version-aware column model for the Records grid
@@ -615,6 +657,11 @@ not a stale snapshot:
   comes from `PaymentAgreementParty`, but this means they show up in that org's own Team & Access
   member list too, which is accurate (they are members, for login purposes) but could read as odd
   to an org admin who doesn't know why an investor contact is sitting in their team roster.
+- **Marketplace activation is informational, by the same intent as Proximity Pay**: connecting a
+  listing (e.g. Puro Connect APIs, SimaPro) records a real `ProjectServiceIntegration` row, but no
+  real API call is made to any provider and no real invoice is generated — the price/pricing model
+  shown per listing is a real, researched figure for that service, not something Proximity bills.
+  Wiring an actual provider integration (auth, webhooks, real usage-based billing) is future work.
 
 None of the above affect the things that matter most for field data integrity — tenant isolation,
 form-version pinning, review/correction history, and exclusive-link race safety are all real and

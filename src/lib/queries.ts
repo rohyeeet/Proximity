@@ -31,6 +31,8 @@ import {
   toTelemetryStream,
   toUser,
   toMilestoneTemplate,
+  toServiceListing,
+  toProjectServiceIntegration,
   type FormCounts,
 } from "@/lib/mappers";
 import type {
@@ -57,8 +59,10 @@ import type {
   PayoutInstruction,
   PayoutRecipient,
   Project,
+  ProjectServiceIntegration,
   Role,
   RoleTier,
+  ServiceListing,
   SplitRule,
   Stage,
   StakeholderConsent,
@@ -478,6 +482,18 @@ export async function getMilestoneTemplatesByProject(projectId: string): Promise
 export async function getMilestoneTemplate(id: string): Promise<MilestoneTemplate | undefined> {
   const row = await prisma.milestoneTemplate.findUnique({ where: { id }, include: { splitRules: true } });
   return row ? toMilestoneTemplate(row) : undefined;
+}
+
+/** The Marketplace's global catalog — curated seed data, same openness as a DomainPack (not
+ * sensitive, no access check needed to read it). */
+export async function getServiceListings(): Promise<ServiceListing[]> {
+  const rows = await prisma.serviceListing.findMany({ orderBy: [{ category: "asc" }, { order: "asc" }] });
+  return rows.map(toServiceListing);
+}
+
+export async function getProjectServiceIntegrations(projectId: string): Promise<ProjectServiceIntegration[]> {
+  const rows = await prisma.projectServiceIntegration.findMany({ where: { projectId } });
+  return rows.map(toProjectServiceIntegration);
 }
 
 export interface MilestoneLedgerRoleShare {
