@@ -15,11 +15,15 @@ export function PaymentsListClient({
   organizationsById,
   myParties,
   isPlatformAdmin,
+  newAgreementProjectId,
 }: {
   agreements: PaymentAgreement[];
   organizationsById: Record<string, Organization>;
   myParties: PaymentAgreementParty[];
   isPlatformAdmin: boolean;
+  /** The project currently selected in the Payments module, if any — carried into the builder so
+   * it never has to ask for a project a second time. */
+  newAgreementProjectId?: string;
 }) {
   const router = useRouter();
   const investorParties = myParties.filter((p) => p.role === "investor");
@@ -83,7 +87,7 @@ export function PaymentsListClient({
 
       <div className="flex items-center justify-end">
         {isPlatformAdmin && (
-          <Link href="/payments/new">
+          <Link href={newAgreementProjectId ? `/payments/new?project=${newAgreementProjectId}` : "/payments/new"}>
             <Button variant="primary" size="sm">
               <Plus className="size-3.5" /> New agreement
             </Button>

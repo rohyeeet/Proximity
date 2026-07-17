@@ -50,9 +50,9 @@ All captured live against the real Postgres-backed app (seeded demo data, not mo
 | ![Team & Access](docs/screenshots/11-team.png) | ![Admin](docs/screenshots/12-admin.png) |
 | **Collect app (field submitter, mobile)** | **My submissions (mobile)** |
 | ![Collect](docs/screenshots/13-collect-mobile.png) | ![My submissions](docs/screenshots/14-collect-submissions-mobile.png) |
-| **Filling a form with real device capture (mobile)** | **Payments — milestone templates (the single lever)** |
-| ![Collect form](docs/screenshots/15-collect-form-mobile.png) | ![Payments milestone templates](docs/screenshots/16-payments-list.png) |
-| **Payments — live ledger, per role** | **Payments — milestone detail (claims, consent, payouts, escrow)** |
+| **Filling a form with real device capture (mobile)** | **Payments — Payment Structure (the single lever, live ledger inline)** |
+| ![Collect form](docs/screenshots/15-collect-form-mobile.png) | ![Payments Payment Structure](docs/screenshots/16-payments-list.png) |
+| **Payments — a milestone's live ledger, expanded inline** | **Payments — milestone detail (claims, consent, payouts, escrow)** |
 | ![Payments ledger](docs/screenshots/16b-payments-ledger.png) | ![Payments detail](docs/screenshots/17-payments-detail.png) |
 | **Payments, role-scoped ledger from a ground partner's phone** | |
 | ![Payments mobile](docs/screenshots/18-payments-mobile.png) | |
@@ -245,11 +245,11 @@ works unchanged for them — that membership grants them nothing on its own.
 
 **What each Payments viewer actually sees is role-scoped, not just action-gated.** `org_admin`/
 `org_sub_admin` (and platform) get the full agreement detail — terms, the per-milestone revenue
-split, escrow internals — plus the project's Milestone templates and Ledger tabs (deal-structuring
-config). Every other viewer — an investor/registry party, a ground partner filing claims, or any
-other org member — sees a `PaymentLedgerSummary` instead: just their own allocation, disbursed-to-
-date, and pending, never another participant's split percentage or identity, and the Milestone
-templates/Ledger tabs aren't shown to them at all (`src/lib/permissions.ts`'s
+split, escrow internals — plus the project's Payment Structure tab (deal-structuring config with
+its live ledger built in). Every other viewer — an investor/registry party, a ground partner filing
+claims, or any other org member — sees a `PaymentLedgerSummary` instead: just their own allocation,
+disbursed-to-date, and pending, never another participant's split percentage or identity, and the
+Payment Structure tab isn't shown to them at all (`src/lib/permissions.ts`'s
 `resolveLedgerViewerRole`, enforced both in the UI and in the underlying API routes).
 
 ## Features
@@ -405,12 +405,13 @@ The money side of the same lifecycle: a buyer's offtake agreement isn't just a c
 milestone schedule with real evidence, real sign-off, and a real (if deliberately simulated)
 settlement rail underneath it. This module — a much larger addition than any single feature above —
 implements Phase 1 of a full payments-infrastructure design (see
-[`CARBON_MARKETS_PAYMENTS_INFRA_DESIGN.md`](./CARBON_MARKETS_PAYMENTS_INFRA_DESIGN.md) in the repo
-root) end to end, live against Postgres, with every dollar amount, KYC/BAV status, and payout
-reference real data — just never a real bank transfer.
+[`CARBON_MARKETS_PAYMENTS_INFRA_DESIGN.md`](./CARBON_MARKETS_PAYMENTS_INFRA_DESIGN.md) for the full
+original design rationale, or [`PAYMENTS_ARCHITECTURE.md`](./PAYMENTS_ARCHITECTURE.md) for the
+current, as-built reference) end to end, live against Postgres, with every dollar amount, KYC/BAV
+status, and payout reference real data — just never a real bank transfer.
 
-**The one lever, authored before any real deal exists:** on the Payments screen's **Milestone
-templates** tab, an org editor defines a project's milestones once — any mix of **Setup/CAPEX**,
+**The one lever, authored before any real deal exists:** on the Payments screen's **Payment
+Structure** tab, an org editor defines a project's milestones once — any mix of **Setup/CAPEX**,
 **Achievement**, and **Monitoring-cycle** types, each a % of the total deal value (must sum to 100
 across the project) with its own revenue-split rule set (platform / developer / farmer-community /
 investor percentages, also summing to 100). Nothing about a real buyer or dollar amount is entered
@@ -455,17 +456,18 @@ investors, how much to developers, how much to farmers" picture, live. No stored
 recomputed from `Milestone`/`PayoutInstruction` rows on every read.
 
 **Where each persona actually reaches it, and what they see:** platform admin and org management
-(`org_admin`/`org_sub_admin`) use the full `/payments` screen in the main app shell — Milestone
-templates, Ledger, and Agreements, with the complete agreement-terms/split/escrow detail on each
-one. Submitter-tier ground partners (who are otherwise routed to the mobile Collect app, not the
-admin shell) reach the identical claim-filing flow at `/collect/payments`. Investor and registry are
-new personas with no `OrgMembership`-based access at all — a dedicated `PaymentAgreementParty` table
-grants them visibility into exactly the agreements they're a party to, regardless of organization.
-Neither ground partners nor investor/registry parties (nor any other non-management org member) ever
-see the Milestone templates/Ledger tabs, or another participant's split % or identity on an
-agreement — they get a simple, role-scoped payment summary instead (their own allocation/disbursed/
-pending; escrow-held/interest-accrued for an investor), enforced both in the UI and in the
-underlying API routes, not just hidden by a missing button.
+(`org_admin`/`org_sub_admin`) use the full `/payments` screen in the main app shell — **Payment
+Structure** (milestones, each with its definition and its live ledger inline) and **Agreements**,
+with the complete agreement-terms/split/escrow detail on each one. Submitter-tier ground partners
+(who are otherwise routed to the mobile Collect app, not the admin shell) reach the identical
+claim-filing flow at `/collect/payments`. Investor and registry are new personas with no
+`OrgMembership`-based access at all — a dedicated `PaymentAgreementParty` table grants them
+visibility into exactly the agreements they're a party to, regardless of organization. Neither
+ground partners nor investor/registry parties (nor any other non-management org member) ever see the
+Payment Structure tab, or another participant's split % or identity on an agreement — they get a
+simple, role-scoped payment summary instead (their own allocation/disbursed/pending; escrow-held/
+interest-accrued for an investor), enforced both in the UI and in the underlying API routes, not just
+hidden by a missing button.
 
 **What's real vs. simulated:** the milestone/claim/consent/gate state machine, the revenue-split
 math, the escrow ledger (interest computed live from a core-portion accrual formula, never a stale
@@ -557,9 +559,10 @@ src/
     studio/            Stage board, Form builder, Flow canvas + inspector + node catalog (incl.
                        the payment_step node's milestone-template picker + inline ledger)
     records/           Row-wise validation table, evidence/geo-map cell popovers, per-field flagging
-    payments/          Milestone-template editor, agreement builder (template checklist, not
-                       freehand), milestone/claim/consent/payout detail UI, role-scoped
-                       PaymentLedgerSummary, per-template ledger panel + tab, audit trail panel
+    payments/          PaymentStructureTab (milestone editor + inline live ledger, one surface),
+                       agreement builder (milestone checklist, not freehand, project-preselected),
+                       milestone/claim/consent/payout detail UI, role-scoped PaymentLedgerSummary,
+                       per-milestone ledger panel (shared with Flow Studio), audit trail panel
     overview/          FlowSummaryTable, StageTracker (compact vertical stage pipeline)
     marketplace/       MarketplaceClient — project picker, category filter/search, activate/deactivate
     connectors/         Connector creation

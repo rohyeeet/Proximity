@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/session";
 import { useStudio } from "@/lib/studio";
 import { canEditStudio } from "@/lib/permissions";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PaymentsListClient } from "@/components/payments/PaymentsListClient";
-import { MilestoneTemplatesClient } from "@/components/payments/MilestoneTemplatesClient";
-import { PaymentsLedgerTab } from "@/components/payments/PaymentsLedgerTab";
+import { PaymentStructureTab } from "@/components/payments/PaymentStructureTab";
 import type { Organization, PaymentAgreement, PaymentAgreementParty } from "@/types";
+
+type Tab = "structure" | "agreements";
 
 export function PaymentsPageClient({
   agreements,
@@ -24,16 +26,24 @@ export function PaymentsPageClient({
 }) {
   const { session } = useSession();
   const { projects } = useStudio();
-  // Milestone templates and the ledger surface every role's own split % across a project — that's
-  // deal-structuring config for the org's own staff, not something an external investor/registry
-  // party (or any other non-management org member) should see. They still reach their own
-  // role-scoped ledger, just via the Agreements tab -> their specific agreement, never this view.
+  const searchParams = useSearchParams();
+
+  // Payment Structure surfaces every role's own split % across a project — that's deal-structuring
+  // config for the org's own staff, not something an external investor/registry party (or any other
+  // non-management org member) should see. They still reach their own role-scoped ledger, just via
+  // the Agreements tab -> their specific agreement, never this view.
   const canEdit = canEditStudio(session.role.tier);
   const canManagePayments = canEdit; // canEditStudio already covers the "platform" tier
   const orgProjects = projects.filter((p) => p.organizationId === session.organization.id);
 
-  const [tab, setTab] = useState<"templates" | "ledger" | "agreements">(canManagePayments ? "templates" : "agreements");
-  const [selectedProjectId, setSelectedProjectId] = useState(orgProjects[0]?.id ?? "");
+  // Both the active tab and the selected project are one shared piece of state for the whole
+  // module — replacing what used to be three independent pickers (Milestone templates tab, Ledger
+  // tab, and the Agreement Builder each asked separately) — seeded once from the URL (so a link
+  // into a specific tab/project still works) and carried forward in plain state from there, which
+  // is what lets "New agreement" hand the project straight to the builder without asking again.
+  const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "agreements" ? "agreements" : "structure");
+  const [selectedProjectId, setSelectedProjectId] = useState(searchParams.get("project") ?? orgProjects[0]?.id ?? "");
+  const effectiveTab: Tab = canManagePayments ? tab : "agreements";
 
   const projectPicker = orgProjects.length > 1 && (
     <select
@@ -53,38 +63,33 @@ export function PaymentsPageClient({
     <div className="flex flex-col gap-4">
       {canManagePayments && (
         <Tabs
-          value={tab}
-          onChange={(v) => setTab(v as "templates" | "ledger" | "agreements")}
+          value={effectiveTab}
+          onChange={(v) => setTab(v as Tab)}
           options={[
-            { value: "templates", label: "Milestone templates" },
-            { value: "ledger", label: "Ledger" },
+            { value: "structure", label: "Payment Structure" },
             { value: "agreements", label: "Agreements", count: agreements.length },
           ]}
         />
       )}
 
-      {canManagePayments && tab === "templates" &&
+      {canManagePayments && effectiveTab === "structure" &&
         (orgProjects.length === 0 ? (
-          <EmptyState title="No projects yet" description="Create a project first — milestone templates belong to one." />
+          <EmptyState title="No projects yet" description="Create a project first — a payment structure belongs to one." />
         ) : (
           <div className="flex flex-col gap-3">
             {projectPicker}
-            {selectedProjectId && <MilestoneTemplatesClient projectId={selectedProjectId} canEdit={canEdit} />}
+            {selectedProjectId && <PaymentStructureTab projectId={selectedProjectId} canEdit={canEdit} />}
           </div>
         ))}
 
-      {canManagePayments && tab === "ledger" &&
-        (orgProjects.length === 0 ? (
-          <EmptyState title="No projects yet" description="Create a project first — the ledger rolls up its milestone templates." />
-        ) : (
-          <div className="flex flex-col gap-3">
-            {projectPicker}
-            {selectedProjectId && <PaymentsLedgerTab projectId={selectedProjectId} />}
-          </div>
-        ))}
-
-      {tab === "agreements" && (
-        <PaymentsListClient agreements={agreements} organizationsById={organizationsById} myParties={myParties} isPlatformAdmin={isPlatformAdmin} />
+      {effectiveTab === "agreements" && (
+        <PaymentsListClient
+          agreements={agreements}
+          organizationsById={organizationsById}
+          myParties={myParties}
+          isPlatformAdmin={isPlatformAdmin}
+          newAgreementProjectId={canManagePayments ? selectedProjectId : undefined}
+        />
       )}
     </div>
   );

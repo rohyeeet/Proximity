@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PaymentStepLedgerPanel } from "@/components/payments/PaymentStepLedgerPanel";
 import { fieldInputClass } from "@/lib/form-fields";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +13,7 @@ import {
   PARTICIPANT_ROLE_LABELS,
   PARTICIPANT_ROLE_CHIP_CLASSES,
   VERIFICATION_SOURCE_LABELS,
+  VERIFICATION_SOURCE_HELP,
   DEFAULT_SPLIT_DRAFT,
 } from "@/lib/payments-labels";
 import type { MilestoneTemplate, MilestoneType, ParticipantRole, VerificationSource } from "@/types";
@@ -36,16 +38,21 @@ function sumPercent(values: string[]): number {
   return values.reduce((sum, v) => sum + (Number.parseFloat(v) || 0), 0);
 }
 
-/** The single lever this session's request is about: a project developer defines every milestone
- * once here — its % of the deal's total value and exactly who gets paid what — before any real
- * buyer agreement exists. A flow's payment_step node then only ever *references* one of these by
- * id; the agreement builder snapshots them into a real Milestone/SplitRule set at signing time. */
-export function MilestoneTemplatesClient({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+/**
+ * "Payment Structure" — the single place a project's milestones are authored AND checked, replacing
+ * what used to be two separate tabs (Milestone templates, Ledger) that both showed different halves
+ * of the same data. Each card shows its own definition (what triggers it, who gets paid) and can
+ * expand in place to show its live ledger — no tab-switching required to correlate the two. A flow's
+ * payment_step node references one of these by id; the agreement builder snapshots selected ones
+ * into a real Milestone/SplitRule set at signing time (never a live reference).
+ */
+export function PaymentStructureTab({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
   const [templates, setTemplates] = useState<MilestoneTemplate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [submitting, setSubmitting] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,12 +119,13 @@ export function MilestoneTemplatesClient({ projectId, canEdit }: { projectId: st
       const res = await fetch(`/api/milestone-templates/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete milestone template");
       setTemplates((prev) => (prev ?? []).filter((t) => t.id !== id));
+      setExpandedId((prev) => (prev === id ? null : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete milestone template");
     }
   }
 
-  if (templates === null) return <p className="text-[13px] text-ink-soft">Loading milestone templates…</p>;
+  if (templates === null) return <p className="text-[13px] text-ink-soft">Loading payment structure…</p>;
 
   return (
     <div className="flex flex-col gap-4">
@@ -128,7 +136,7 @@ export function MilestoneTemplatesClient({ projectId, canEdit }: { projectId: st
         </p>
         {canEdit && !creating && (
           <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
-            <Plus className="size-3.5" /> New milestone template
+            <Plus className="size-3.5" /> New milestone
           </Button>
         )}
       </div>
@@ -137,91 +145,121 @@ export function MilestoneTemplatesClient({ projectId, canEdit }: { projectId: st
 
       {templates.length === 0 && !creating && (
         <EmptyState
-          title="No milestone templates yet"
+          title="No milestones yet"
           description="Define what % of the total value each milestone releases, and who gets paid, before any real agreement is signed."
         />
       )}
 
-      {templates.map((template) => (
-        <Card key={template.id}>
-          <CardHeader>
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">
-                {MILESTONE_TYPE_LABELS[template.type]} · {VERIFICATION_SOURCE_LABELS[template.verificationSource]}
-              </p>
-              <h3 className="text-[14px] font-semibold text-ink">{template.label}</h3>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="tabular text-[14px] font-semibold text-ink">{template.percentOfTotal}%</span>
-              {canEdit && (
-                <button
-                  aria-label="Delete milestone template"
-                  onClick={() => deleteTemplate(template.id)}
-                  className="flex size-7 items-center justify-center rounded text-ink-soft hover:bg-critical-bg hover:text-critical-text"
+      {templates.map((template) => {
+        const isExpanded = expandedId === template.id;
+        return (
+          <Card key={template.id}>
+            <CardHeader>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">
+                  {MILESTONE_TYPE_LABELS[template.type]} · {VERIFICATION_SOURCE_LABELS[template.verificationSource]}
+                </p>
+                <h3 className="text-[14px] font-semibold text-ink">{template.label}</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="tabular text-[14px] font-semibold text-ink">{template.percentOfTotal}%</span>
+                {canEdit && (
+                  <button
+                    aria-label="Delete milestone"
+                    onClick={() => deleteTemplate(template.id)}
+                    className="flex size-7 items-center justify-center rounded text-ink-soft hover:bg-critical-bg hover:text-critical-text"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            </CardHeader>
+            <CardBody className="flex flex-wrap items-center gap-2">
+              {template.splitRules.map((rule) => (
+                <span
+                  key={rule.id}
+                  className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium", PARTICIPANT_ROLE_CHIP_CLASSES[rule.participantRole])}
                 >
-                  <Trash2 className="size-3.5" />
-                </button>
-              )}
-            </div>
-          </CardHeader>
-          <CardBody className="flex flex-wrap gap-2">
-            {template.splitRules.map((rule) => (
-              <span
-                key={rule.id}
-                className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium", PARTICIPANT_ROLE_CHIP_CLASSES[rule.participantRole])}
+                  {PARTICIPANT_ROLE_LABELS[rule.participantRole]}
+                  <span className="tabular">{rule.percent}%</span>
+                </span>
+              ))}
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : template.id)}
+                className="ml-auto flex items-center gap-1 text-[12.5px] font-medium text-brand-600 hover:underline"
               >
-                {PARTICIPANT_ROLE_LABELS[rule.participantRole]}
-                <span className="tabular">{rule.percent}%</span>
-              </span>
-            ))}
-          </CardBody>
-        </Card>
-      ))}
+                {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                {isExpanded ? "Hide" : "View"} live ledger
+              </button>
+            </CardBody>
+            {isExpanded && (
+              <div className="border-t border-border bg-sunken/40 px-5 py-4">
+                <PaymentStepLedgerPanel milestoneTemplateId={template.id} />
+              </div>
+            )}
+          </Card>
+        );
+      })}
 
       {creating && (
         <Card>
           <CardHeader>
-            <h3 className="text-[14px] font-semibold text-ink">New milestone template</h3>
+            <h3 className="text-[14px] font-semibold text-ink">New milestone</h3>
           </CardHeader>
-          <CardBody className="flex flex-col gap-3">
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_1fr_100px]">
-              <select value={draft.type} onChange={(e) => setDraft((p) => ({ ...p, type: e.target.value as MilestoneType }))} className={fieldInputClass}>
-                {Object.entries(MILESTONE_TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={draft.label}
-                onChange={(e) => setDraft((p) => ({ ...p, label: e.target.value }))}
-                placeholder="Milestone label"
-                className={fieldInputClass}
-              />
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={draft.percentOfTotal}
-                onChange={(e) => setDraft((p) => ({ ...p, percentOfTotal: e.target.value }))}
-                className={fieldInputClass}
-              />
-            </div>
-            <select
-              value={draft.verificationSource}
-              onChange={(e) => setDraft((p) => ({ ...p, verificationSource: e.target.value as VerificationSource }))}
-              className={fieldInputClass}
-            >
-              {Object.entries(VERIFICATION_SOURCE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-
+          <CardBody className="flex flex-col gap-4">
             <div>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">What triggers this payment</p>
+              <div className="flex flex-col gap-2.5">
+                <input
+                  value={draft.label}
+                  onChange={(e) => setDraft((p) => ({ ...p, label: e.target.value }))}
+                  placeholder="Milestone label, e.g. “First 1,000t produced”"
+                  className={fieldInputClass}
+                />
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[120px_1fr]">
+                  <div>
+                    <label className="mb-1 block text-[11px] text-ink-soft">% of total value</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={draft.percentOfTotal}
+                      onChange={(e) => setDraft((p) => ({ ...p, percentOfTotal: e.target.value }))}
+                      className={fieldInputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] text-ink-soft">Type</label>
+                    <select value={draft.type} onChange={(e) => setDraft((p) => ({ ...p, type: e.target.value as MilestoneType }))} className={fieldInputClass}>
+                      {Object.entries(MILESTONE_TYPE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-ink-soft">Verification source</label>
+                  <select
+                    value={draft.verificationSource}
+                    onChange={(e) => setDraft((p) => ({ ...p, verificationSource: e.target.value as VerificationSource }))}
+                    className={fieldInputClass}
+                  >
+                    {Object.entries(VERIFICATION_SOURCE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11.5px] leading-snug text-ink-soft">{VERIFICATION_SOURCE_HELP[draft.verificationSource]}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-3.5">
               <div className="mb-1.5 flex items-center justify-between">
-                <label className="text-[12px] font-medium text-ink-soft">Who gets paid</label>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">Who gets paid</p>
                 <span className={cn("text-[12px] font-medium", draftSplitValid ? "text-good-text" : "text-critical-text")}>
                   {draftSplitTotal}% of 100%
                 </span>
@@ -248,7 +286,7 @@ export function MilestoneTemplatesClient({ projectId, canEdit }: { projectId: st
 
             <div className="flex items-center gap-2">
               <Button variant="primary" size="sm" onClick={createTemplate} disabled={!canSubmitDraft}>
-                {submitting ? "Creating…" : "Create milestone template"}
+                {submitting ? "Creating…" : "Create milestone"}
               </Button>
               <Button
                 variant="ghost"
