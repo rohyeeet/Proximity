@@ -205,22 +205,23 @@ export function MarketplaceClient({ listings }: { listings: ServiceListing[] }) 
       {error && <p className="rounded-md border border-critical-text/30 bg-critical-bg px-3 py-2 text-[13px] text-critical-text">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
-        <div className="flex flex-row flex-wrap gap-1.5 lg:flex-col">
+        <div className="flex flex-row flex-wrap gap-1.5 lg:flex-col lg:flex-nowrap">
           <button
             onClick={() => setActiveCategory("all")}
             className={cn(
-              "flex items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[13px]",
+              "flex min-w-0 items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[13px] lg:w-full",
               activeCategory === "all" ? "bg-brand-50 font-medium text-brand-700" : "text-ink-soft hover:bg-sunken"
             )}
           >
-            All categories <span className="tabular ml-2 text-[11.5px]">{listings.length}</span>
+            <span className="truncate">All categories</span>
+            <span className="tabular ml-2 shrink-0 text-[11.5px]">{listings.length}</span>
           </button>
           {(Object.keys(SERVICE_CATEGORY_LABELS) as ServiceCategory[]).map((category) => (
             <button
               key={category}
               onClick={() => setActiveCategory(category)}
               className={cn(
-                "flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px]",
+                "flex min-w-0 items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] lg:w-full",
                 activeCategory === category ? "bg-brand-50 font-medium text-brand-700" : "text-ink-soft hover:bg-sunken"
               )}
             >
